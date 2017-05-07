@@ -1,0 +1,7 @@
+*.o
+recv/recv
+server/bbpsender
+keys/genkey
+keys/privkey.inc
+keys/pubkey.inc
+server/tst
