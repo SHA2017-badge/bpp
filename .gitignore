@@ -1,7 +1,12 @@
 *.o
+*.a
 recv/recv
 server/bbpsender
 keys/genkey
 keys/privkey.inc
 keys/pubkey.inc
 server/tst
+blocksend/blocksend
+lyric_test/lyrics
+lyric_test/never.txt
+recv/tst

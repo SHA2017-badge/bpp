@@ -9,6 +9,9 @@
 #include "chksign.h"
 #include "defec.h"
 #include "serdec.h"
+#include "hldemux.h"
+
+#include "subtitle.h"
 
 static int createListenSock() {
 	int sock;
@@ -48,7 +51,10 @@ int main(int argc, char** argv) {
 
 	chksignInit(defecRecv);
 	defecInit(serdecRecv, 1400);
-	serdecInit(myRecv);
+	serdecInit(hldemuxRecv);
+	
+
+	subtitleInit();
 
 	while((len = recvfrom(sock, buff, sizeof(buff), 0, NULL, 0)) >= 0) {
 		printf("Got UDP packet of %d byte\n", len);

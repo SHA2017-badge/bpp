@@ -35,48 +35,61 @@ de voorgaande X pakketten?
 
 #define BLOCKDEV_BLKSZ 4096
 
-#define HLPACKET_HK			0		//Housekeeping packets
-#define HLPACKET_BDSYNC		1		//Filesync packets
-#define HLPACKET_SUBTITLES	2		//
+#define HLPACKET_TYPE_HK			0		//Housekeeping packets
+#define HLPACKET_TYPE_BDSYNC		1		//Filesync packets
+#define HLPACKET_TYPE_SUBTITLES		2		//
 
 typedef struct {
-	uint8_t type;
+	uint16_t type;
+	uint16_t subtype;
 	uint8_t data[];
 } __attribute__ ((packed)) HlPacket;
 
 
-#define BDSYNC_BITMAP		0
-#define BDSYNC_OLDERMARKER	1
-#define BDSYNC_CHANGE		2
-
+/* These are always sent in this order:
+BDSYNC_SUBTYPE_BITMAP * n
+BDSYNC_SUBTYPE_OLDERMARKER
+(BDSYNC_SUBTYPE_CHANGE interspersed by BDSYNC_SUBTYPE_CATALOGPTR)
+*/
+#define BDSYNC_SUBTYPE_BITMAP		0
+#define BDSYNC_SUBTYPE_OLDERMARKER	1
+#define BDSYNC_SUBTYPE_CHANGE		2
+#define BDSYNC_SUBTYPE_CATALOGPTR	3
 
 /*
  Bitmap type. If the sectors marked by an 1 in the bitmap have a changeID that is newer than
  changeIdOrig, they can be marked as changeID changeIdNew without changing the contents.
 */
 typedef struct {
-	uint8_t type;
 	uint32_t changeIdOrig;
 	uint32_t changeIdNew;
 	uint8_t bitmap[];
 } __attribute__ ((packed)) BDPacketBitmap;
 
 /*
- OlderMarker. Tells clients  that updates for sectors older than changeId will be sent after
+ OlderMarker. Tells clients that updates for sectors from secIdStart to secIdEnd will be sent after
  delayMs milliseconds from now.
 */
 typedef struct {
-	uint8_t type;
-	uint32_t changeId;
+	uint32_t oldestNewTs; //Last timestamp sent for 'new' packets.
+	uint16_t secIdStart;
+	uint16_t secIdEnd;
 	uint16_t delayMs;
 } __attribute__ ((packed)) BDPacketOldermarker;
+
+
+/*
+ CatalogPtr. Tells clients how long it'll take for the next round of bitmaps etc will be sent.
+*/
+typedef struct {
+	uint16_t delayMs;
+} __attribute__ ((packed)) BDPacketCatalogPtr;
 
 
 /*
  Change. Contains a sector ID and the info therein.
  */
 typedef struct {
-	uint8_t type;
 	uint32_t changeId;
 	uint16_t sector;
 	uint8_t data[];
