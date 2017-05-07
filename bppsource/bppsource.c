@@ -27,7 +27,7 @@ int bppSend(int sockfd, int subtype, uint8_t *data, int len) {
 	for (i=0; i<len; i++) {
 		sprintf(&buf[5+i*2], "%02X\n", data[i]);
 	}
-	printf("%s", buf);
+//	printf("%s", buf);
 	i=write(sockfd, buf, 6+len*2);
 	if (i<=0) return -1;
 	return bppGetResponse(sockfd);

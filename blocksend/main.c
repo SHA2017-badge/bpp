@@ -81,7 +81,7 @@ implement a special mode for that.
 #define BLOCKSIZE 4096
 
 #define POSTFIX_LASTPROCESSED ".lastprocessed"
-#define POSTFIX_LASTPROCESSED_TMP ".timestamp_tmp"
+#define POSTFIX_LASTPROCESSED_TMP ".lastprocessed_tmp"
 #define POSTFIX_TIMESTAMP ".timestamp"
 #define POSTFIX_TIMESTAMP_TMP ".timestamp_tmp"
 
@@ -110,10 +110,11 @@ static void waitCycle(int i) {
 	struct timeval tv;
 	int64_t usec, usecTgt, waitTime;
 	gettimeofday(&tv, NULL);
-	usecTgt=cycleStart.tv_usec+(cycleStart.tv_sec*1000000L);
-	usecTgt+=((CYCLE_MS*1000)/PACKETS_PER_CYCLE);
-	usec=tv.tv_usec+(tv.tv_sec*1000000L);
+	usecTgt=cycleStart.tv_usec+(cycleStart.tv_sec*1000000LL);
+	usecTgt+=((CYCLE_MS*1000LL*i)/PACKETS_PER_CYCLE);
+	usec=tv.tv_usec+(tv.tv_sec*1000000LL);
 	waitTime=usecTgt-usec;
+//	printf("wait %ld\n", waitTime);
 	if (waitTime>0) usleep(waitTime);
 }
 
@@ -141,15 +142,16 @@ void updateTimestamps() {
 	//file corresponds to.
 	char *fnbuf=malloc(strlen(prefix)+32);
 	sprintf(fnbuf, "%s%s", prefix, POSTFIX_LASTPROCESSED_TMP);
-	free(fnbuf);
 	f=open(fnbuf, O_WRONLY|O_CREAT|O_TRUNC, 0644);
 	if (f<=0) {
-		perror(fnbuf);
+		printf("%s: ", fnbuf);
+		perror("opening lastprocessed_tmp");
 		exit(1);
 	}
 	r=write(f, newBuf, fileSize);
 	if (r!=fileSize) {
-		perror(fnbuf);
+		printf("%s: ", fnbuf);
+		perror("writing lastprocessed_tmp");
 		exit(1);
 	}
 	close(f);
@@ -165,12 +167,14 @@ void updateTimestamps() {
 	sprintf(fnbuf, "%s%s", prefix, POSTFIX_TIMESTAMP_TMP);
 	f=open(fnbuf, O_WRONLY|O_CREAT|O_TRUNC, 0644);
 	if (f<=0) {
-		perror(fnbuf);
+		printf("%s: ", fnbuf);
+		perror("opening timestamp_tmp");
 		exit(1);
 	}
 	r=write(f, fileTimestamps, (fileSize/BLOCKSIZE)*sizeof(uint32_t));
-	if (r!=fileSize) {
-		perror(fnbuf);
+	if (r!=(fileSize/BLOCKSIZE)*sizeof(uint32_t)) {
+		printf("%s: (%d/%d)", fnbuf, r, fileSize);
+		perror("writing timestamp_tmp");
 		exit(1);
 	}
 	close(f);
@@ -271,7 +275,7 @@ int compareSortedTs(const void *a, const void *b) {
 	SortedTs *sa=(SortedTs*)a;
 	SortedTs *sb=(SortedTs*)b;
 	if (sa->ts==sb->ts) return (sa->block<sb->block)?-1:1;
-	return (sa->ts<sb->ts)?-1:1;
+	return (sa->ts>sb->ts)?-1:1;
 }
 
 
@@ -283,8 +287,10 @@ void mainLoop() {
 	};
 	SortedTs *sortedTs=malloc(sizeof(SortedTs)*(fileSize/BLOCKSIZE));
 	while(1) {
+		printf("Updating timestamps.\n");
 		updateTimestamps();
 
+		printf("Send out bitmap catalogue\n");
 		//Send out the bitmap catalogue
 		uint32_t currTs=(uint32_t)time(NULL);
 		for (int i=0; bitmapTimes[i]!=0; i++) {
@@ -299,6 +305,7 @@ void mainLoop() {
 		}
 		qsort(sortedTs, fileSize/BLOCKSIZE, sizeof(SortedTs), compareSortedTs);
 
+		printf("Send oldermarker\n");
 		//Send oldermarker
 		int lastPacketPos=oldPacketPos+OLDPACKETS_PER_CYCLE;
 		if (lastPacketPos>=(fileSize/BLOCKSIZE)) oldPacketPos-=(fileSize/BLOCKSIZE); //wraparound
@@ -311,12 +318,14 @@ void mainLoop() {
 		//Send new packets first.
 		for (packet=0; packet<(PACKETS_PER_CYCLE-OLDPACKETS_PER_CYCLE); packet++) {
 			waitCycle(packet);
+			printf("Sending (new) block %d.\n", sortedTs[packet].block);
 			if ((packet%CATALOGMARKER_EVERY_PACKETS)==0) sendCatalogPtr(packet);
 			sendChange(sortedTs[packet].block);
 		}
 		//Followed by older packets.
 		for (; packet<PACKETS_PER_CYCLE; packet++) {
 			waitCycle(packet);
+			printf("Sending (old) block %d.\n", oldPacketPos);
 			if ((packet%CATALOGMARKER_EVERY_PACKETS)==0) sendCatalogPtr(packet);
 			sendChange(oldPacketPos);
 			oldPacketPos++;
@@ -334,7 +343,7 @@ int main(int argc, char **argv) {
 		exit(0);
 	}
 	blockfile=argv[1];
-	char *prefix=(argc>2)?argv[2]:argv[1];
+	prefix=(argc>2)?argv[2]:argv[1];
 	fnbuf=malloc(strlen(prefix)+32);
 
 	bppCon=bppCreateConnection("localhost", 1);
@@ -362,7 +371,7 @@ int main(int argc, char **argv) {
 	fileTimestamps=malloc(sizeof(uint32_t)*(fileSize/BLOCKSIZE));
 	r=read(f, fileContents, fileSize);
 	if (r!=fileSize) {
-		printf("Eek! Couldn't load in entire lastprocessed file.");
+		printf("Eek! Couldn't load in entire lastprocessed file.\n");
 		exit(1);
 	}
 	close(f);
@@ -370,8 +379,10 @@ int main(int argc, char **argv) {
 	sprintf(fnbuf, "%s%s", prefix, POSTFIX_TIMESTAMP);
 	f=open(fnbuf, O_RDONLY);
 	if (f<=0) {
-		printf("Can't read blocktimestamp file; zeroing timestamps.");
-		memset(fileTimestamps, 0, sizeof(uint32_t)*(fileSize/BLOCKSIZE));
+		printf("Can't read blocktimestamp file; seting timestamps to current time.\n");
+		for (int i=0; i<(fileSize/BLOCKSIZE); i++) {
+			fileTimestamps[i]=time(NULL);
+		}
 	} else {
 		read(f, fileTimestamps, sizeof(uint32_t)*(fileSize/BLOCKSIZE));
 		close(f);

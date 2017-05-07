@@ -7,4 +7,4 @@ blocksend: $(OBJS)
 
 .PHONY: clean
 clean: 
-	rm -f $(OBJS) lyrics
+	rm -f $(OBJS) blocksend
