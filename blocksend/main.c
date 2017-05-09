@@ -93,10 +93,17 @@ uint32_t *fileTimestamps;
 int bppCon;
 
 
+#if 1
 #define CYCLE_MS (60*1000) //cycle every ms
 #define PACKETS_PER_CYCLE 150
 #define OLDPACKETS_PER_CYCLE 50
 #define CATALOGMARKER_EVERY_PACKETS 8
+#else
+#define CYCLE_MS (10*1000) //cycle every ms
+#define PACKETS_PER_CYCLE 300
+#define OLDPACKETS_PER_CYCLE 150
+#define CATALOGMARKER_EVERY_PACKETS 8
+#endif
 
 static struct timeval cycleStart;
 static int cyclePos=0;
@@ -124,7 +131,7 @@ static void waitCycle(int i) {
 //Does a fair amount of file juggling to make sure the state is recoverable if it
 //is aborted at any time.
 //Results in an updated fileContents and fileTimestamps variable.
-void updateTimestamps() {
+uint32_t updateTimestamps() {
 	char *newBuf=malloc(fileSize);
 	time_t tstamp=time(NULL);
 	int f=open(blockfile, O_RDONLY);
@@ -159,6 +166,7 @@ void updateTimestamps() {
 	//Update timestamps
 	for (int i=0; i<fileSize/BLOCKSIZE; i++) {
 		if (memcmp(&fileContents[i*BLOCKSIZE], &newBuf[i*BLOCKSIZE], BLOCKSIZE)!=0) {
+			printf("updateTimestamps: block %d updated.\n", i);
 			fileTimestamps[i]=(uint32_t)tstamp;
 		}
 	}
@@ -202,6 +210,7 @@ void updateTimestamps() {
 
 	free(fnbuf);
 	free(fnbuf2);
+	return tstamp;
 }
 
 
@@ -214,8 +223,8 @@ void sendBitmapFor(uint32_t ts, uint32_t nowts) {
 	int bitmapBytes=((fileSize/BLOCKSIZE)+7)/8;
 	p=malloc(sizeof(BDPacketBitmap)+bitmapBytes);
 	memset(p, 0, sizeof(BDPacketBitmap)+bitmapBytes);
-	p->changeIdOrig=ts;
-	p->changeIdNew=nowts;
+	p->changeIdOrig=htonl(ts);
+	p->changeIdNew=htonl(nowts);
 	for (int i=0; i<(fileSize/BLOCKSIZE); i++) {
 		if (fileTimestamps[i]<ts) p->bitmap[i/8]|=(1<<(i&7));
 	}
@@ -228,11 +237,11 @@ void sendBitmapFor(uint32_t ts, uint32_t nowts) {
 }
 
 //Send a change for block i.
-void sendChange(int i) {
+void sendChange(int i, uint32_t changeId) {
 	BDPacketChange *p;
 	p=malloc(sizeof(BDPacketChange)+BLOCKSIZE);
 	memcpy(p->data, &fileContents[i*BLOCKSIZE], BLOCKSIZE);
-	p->changeId=htonl(fileTimestamps[i]);
+	p->changeId=htonl(changeId);
 	p->sector=htons(i);
 	int r=bppSend(bppCon, BDSYNC_SUBTYPE_CHANGE, (uint8_t*)p, sizeof(BDPacketChange)+BLOCKSIZE);
 	if (!r) {
@@ -245,7 +254,7 @@ void sendChange(int i) {
 //Send a packet indicating roughly when the next catalog will be. We're sending packet i now.
 void sendCatalogPtr(int i) {
 	BDPacketCatalogPtr p;
-	p.delayMs=htons((CYCLE_MS*(PACKETS_PER_CYCLE-i))/PACKETS_PER_CYCLE);
+	p.delayMs=htonl((CYCLE_MS*(PACKETS_PER_CYCLE-i))/PACKETS_PER_CYCLE);
 	int r=bppSend(bppCon, BDSYNC_SUBTYPE_CATALOGPTR, (uint8_t*)&p, sizeof(BDPacketCatalogPtr));
 	if (!r) {
 		printf("Error sending bitmap packet!\n");
@@ -255,10 +264,10 @@ void sendCatalogPtr(int i) {
 
 void sendOlderMarker(uint32_t oldestNewTs, int secIdStart, int secIdEnd, int delayMs) {
 	BDPacketOldermarker p;
-	p.oldestNewTs=oldestNewTs;
-	p.secIdStart=secIdStart;
-	p.secIdEnd=secIdEnd;
-	p.delayMs=delayMs;
+	p.oldestNewTs=htonl(oldestNewTs);
+	p.secIdStart=htons(secIdStart);
+	p.secIdEnd=htons(secIdEnd);
+	p.delayMs=htonl(delayMs);
 	int r=bppSend(bppCon, BDSYNC_SUBTYPE_OLDERMARKER, (uint8_t*)&p, sizeof(BDPacketOldermarker));
 	if (!r) {
 		printf("Error sending bitmap packet!\n");
@@ -281,20 +290,20 @@ int compareSortedTs(const void *a, const void *b) {
 
 void mainLoop() {
 	int oldPacketPos=0;
-	int bitmapTimes[]={
+	uint32_t currId;
+	time_t bitmapTimes[]={
 		60*1, 60*3, 60*5, 60*10, 60*15, 60*20, 60*30, 60*60,
 		60*60*3, 60*60*12, 60*60*24, 60*60*48, 0
 	};
 	SortedTs *sortedTs=malloc(sizeof(SortedTs)*(fileSize/BLOCKSIZE));
 	while(1) {
 		printf("Updating timestamps.\n");
-		updateTimestamps();
+		currId=updateTimestamps();
 
 		printf("Send out bitmap catalogue\n");
 		//Send out the bitmap catalogue
-		uint32_t currTs=(uint32_t)time(NULL);
 		for (int i=0; bitmapTimes[i]!=0; i++) {
-			sendBitmapFor(currTs-bitmapTimes[i], currTs);
+			sendBitmapFor(time(NULL)-bitmapTimes[i], currId);
 		}
 
 		//Sort timestamps in a descending order (newest-first) so we can send out data that has changed
@@ -308,7 +317,7 @@ void mainLoop() {
 		printf("Send oldermarker\n");
 		//Send oldermarker
 		int lastPacketPos=oldPacketPos+OLDPACKETS_PER_CYCLE;
-		if (lastPacketPos>=(fileSize/BLOCKSIZE)) oldPacketPos-=(fileSize/BLOCKSIZE); //wraparound
+		if (lastPacketPos>=(fileSize/BLOCKSIZE)) lastPacketPos-=(fileSize/BLOCKSIZE); //wraparound
 		sendOlderMarker(sortedTs[(PACKETS_PER_CYCLE-OLDPACKETS_PER_CYCLE)].ts, 
 				oldPacketPos, lastPacketPos, 
 				(CYCLE_MS*(PACKETS_PER_CYCLE-OLDPACKETS_PER_CYCLE))/PACKETS_PER_CYCLE);
@@ -320,14 +329,14 @@ void mainLoop() {
 			waitCycle(packet);
 			printf("Sending (new) block %d.\n", sortedTs[packet].block);
 			if ((packet%CATALOGMARKER_EVERY_PACKETS)==0) sendCatalogPtr(packet);
-			sendChange(sortedTs[packet].block);
+			sendChange(sortedTs[packet].block, currId);
 		}
 		//Followed by older packets.
 		for (; packet<PACKETS_PER_CYCLE; packet++) {
 			waitCycle(packet);
 			printf("Sending (old) block %d.\n", oldPacketPos);
 			if ((packet%CATALOGMARKER_EVERY_PACKETS)==0) sendCatalogPtr(packet);
-			sendChange(oldPacketPos);
+			sendChange(oldPacketPos, currId);
 			oldPacketPos++;
 			if (oldPacketPos>=(fileSize/BLOCKSIZE)) oldPacketPos=0;
 		}
@@ -346,7 +355,7 @@ int main(int argc, char **argv) {
 	prefix=(argc>2)?argv[2]:argv[1];
 	fnbuf=malloc(strlen(prefix)+32);
 
-	bppCon=bppCreateConnection("localhost", 1);
+	bppCon=bppCreateConnection("localhost", HLPACKET_TYPE_BDSYNC);
 	if (bppCon<=0) {
 		perror("connecting to bppserver");
 		exit(1);

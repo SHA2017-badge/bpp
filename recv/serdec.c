@@ -34,9 +34,9 @@ static int scanHdr(uint8_t in) {
 	h[sizeof(SerdesHdr)-1]=in;
 	if (ntohl(hdr.magic)==SERDES_MAGIC) {
 		if (ntohs(hdr.len)<MAX_PACKET_LEN) {
-			if (hdrBytesScanned!=sizeof(SerdesHdr)) {
-				printf("Serdec: skipped %d bytes\n", hdrBytesScanned-sizeof(SerdesHdr));
-			}
+//			if (hdrBytesScanned!=sizeof(SerdesHdr)) {
+//				printf("Serdec: skipped %d bytes\n", hdrBytesScanned-sizeof(SerdesHdr));
+//			}
 			hdrBytesScanned=0;
 			return 1;
 		}
@@ -53,7 +53,7 @@ static void finishPacket() {
 	crc=crc16_block(0, (uint8_t*)&hdr, sizeof(SerdesHdr));
 	crc=crc16_block(crc, serPacket, plen);
 	if (crc!=rcrc) {
-		printf("Serdec: CRC16 error!\n");
+		printf("Serdec: CRC16 error! Got %04X expected %04X\n", crc, rcrc);
 		//hexdump(serPacket, plen);
 	} else {
 		recvCb(serPacket, plen);

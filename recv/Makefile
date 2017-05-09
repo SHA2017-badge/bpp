@@ -1,4 +1,5 @@
-OBJS=main.o ../common/crc16.o sha256.o uECC.o chksign.o defec.o serdec.o hexdump.o subtitle.o hldemux.o
+OBJS=main.o ../common/crc16.o sha256.o uECC.o chksign.o defec.o serdec.o hexdump.o subtitle.o hldemux.o \
+		bdemu.o blockdecode.o blkidcache_noop.o
 TARGET=recv
 CFLAGS=-ggdb -I ../common -I ../micro-ecc -I ../sha256
 LDFLAGS=

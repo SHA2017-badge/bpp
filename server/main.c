@@ -132,13 +132,17 @@ static void handleClient(TcpClient *cl) {
 	} while (foundEnter);
 }
 
-//#define SIMULATE_PACKET_LOSS
+#define SIMULATE_PACKET_LOSS
 
 
 int main(int argc, char **argv) {
 	int listenFd;
 	senderInit();
-	senderAddDest("192.168.5.255");
+	if (argc==1) {
+		senderAddDest("192.168.5.255");
+	} else {
+		senderAddDest(argv[1]);
+	}
 	
 #ifndef SIMULATE_PACKET_LOSS
 	signInit(senderSendPkt, senderGetMaxPacketLength());

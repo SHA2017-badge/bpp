@@ -40,7 +40,7 @@ void defecRecv(uint8_t *packet, size_t len) {
 
 	int serial=ntohl(p->serial);
 	int spos=serial%(FEC_M+1);
-	printf("Serial %d spos %d lastSent %d\n", serial, spos, lastSentSerial);
+//	printf("Serial %d spos %d lastSent %d\n", serial, spos, lastSentSerial);
 	if (spos<FEC_M) {
 		//Normal packet.
 		memcpy(parPacket[spos], p->data, plLen);
@@ -51,6 +51,8 @@ void defecRecv(uint8_t *packet, size_t len) {
 			lastSentSerial=serial;
 		}
 	} else {
+//ToDo: What if we're missing the parity packet?
+
 		//Parity packet. See if we need to recover something.
 		int exSerial=serial-FEC_M;
 		int missing=-1;
@@ -63,9 +65,24 @@ void defecRecv(uint8_t *packet, size_t len) {
 		}
 		if (missing==-2) {
 			printf("Fec: Missed too many packets in segment\n");
-			recvCb(NULL, 0);
+			//Still send packets we do have.
+			int exSerial=serial-FEC_M;
+			for (int i=missing; i<FEC_M; i++) {
+				if (parSerial[i]==exSerial) {
+					recvCb(parSerial[i],plLen);
+				} else {
+					recvCb(NULL, 0);
+				}
+				exSerial++;
+			}
 		} else if (missing==-1) {
-			//Nothing missing. Discard parity packet.
+			//Nothing missing in *this* segment. Discard parity packet.
+			int exSerial=serial-FEC_M;
+			if (exSerial>lastSentSerial) {
+				//Seems we're missing entire previous segments.
+				printf("FEC: Missing multiple segments! Packets %d - %d.\n", lastSentSerial, exSerial);
+				recvCb(NULL, 0);
+			}
 		} else {
 			//Missing one packet. We can recover this.
 			//Xor the parity packet with the packets we have to magically allow the
@@ -83,14 +100,14 @@ void defecRecv(uint8_t *packet, size_t len) {
 				printf("FEC: Missing multiple segments! Packets %d - %d.\n", lastSentSerial, exSerial);
 				recvCb(NULL, 0);
 			}
-			for (int i=0; i<FEC_M; i++) {
+			for (int i=missing; i<FEC_M; i++) {
 				if (i==missing) {
 					recvCb(p->data, plLen);
 				} else {
 					recvCb(parPacket[i], plLen);
 				}
 			}
-			printf("FEC: Restored packet.\n");
+//			printf("FEC: Restored packet.\n");
 		}
 		lastSentSerial=serial;
 	}

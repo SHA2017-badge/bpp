@@ -12,6 +12,7 @@
 #include "hldemux.h"
 
 #include "subtitle.h"
+#include "blockdecode.h"
 
 static int createListenSock() {
 	int sock;
@@ -53,11 +54,11 @@ int main(int argc, char** argv) {
 	defecInit(serdecRecv, 1400);
 	serdecInit(hldemuxRecv);
 	
-
+	blockdecodeInit(8*1024*1024);
 	subtitleInit();
 
 	while((len = recvfrom(sock, buff, sizeof(buff), 0, NULL, 0)) >= 0) {
-		printf("Got UDP packet of %d byte\n", len);
+//		printf("Got UDP packet of %d byte\n", len);
 		chksignRecv(buff, len);
 	}
 	perror("recv");

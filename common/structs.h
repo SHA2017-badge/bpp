@@ -50,6 +50,10 @@ typedef struct {
 BDSYNC_SUBTYPE_BITMAP * n
 BDSYNC_SUBTYPE_OLDERMARKER
 (BDSYNC_SUBTYPE_CHANGE interspersed by BDSYNC_SUBTYPE_CATALOGPTR)
+
+The changeIdNew of bitmap packets and the changeId of change packets will always be the same.
+If they're not, it indicates something has gone wrong (missed a catalog) and the logic should 
+wait till the next catalog.
 */
 #define BDSYNC_SUBTYPE_BITMAP		0
 #define BDSYNC_SUBTYPE_OLDERMARKER	1
@@ -74,7 +78,7 @@ typedef struct {
 	uint32_t oldestNewTs; //Last timestamp sent for 'new' packets.
 	uint16_t secIdStart;
 	uint16_t secIdEnd;
-	uint16_t delayMs;
+	uint32_t delayMs;
 } __attribute__ ((packed)) BDPacketOldermarker;
 
 
@@ -82,7 +86,7 @@ typedef struct {
  CatalogPtr. Tells clients how long it'll take for the next round of bitmaps etc will be sent.
 */
 typedef struct {
-	uint16_t delayMs;
+	uint32_t delayMs;
 } __attribute__ ((packed)) BDPacketCatalogPtr;
 
 

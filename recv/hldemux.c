@@ -32,6 +32,7 @@ void hldemuxAddType(int type, HlCallback cb, void *arg) {
 	item->type=type;
 	item->cb=cb;
 	item->arg=arg;
+	item->next=cbinfo;
 	cbinfo=item;
 }
 
