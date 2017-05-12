@@ -130,7 +130,8 @@ static void waitCycle(int i) {
 //Read in block file, see which blocks have changed and update the timestamp data
 //Does a fair amount of file juggling to make sure the state is recoverable if it
 //is aborted at any time.
-//Results in an updated fileContents and fileTimestamps variable.
+//If not updated, returns 0 and updates nothing.
+//If updated, results in an updated fileContents and fileTimestamps variable.
 uint32_t updateTimestamps() {
 	char *newBuf=malloc(fileSize);
 	time_t tstamp=time(NULL);
@@ -164,11 +165,20 @@ uint32_t updateTimestamps() {
 	close(f);
 
 	//Update timestamps
+	int fileChanged=0;
 	for (int i=0; i<fileSize/BLOCKSIZE; i++) {
 		if (memcmp(&fileContents[i*BLOCKSIZE], &newBuf[i*BLOCKSIZE], BLOCKSIZE)!=0) {
 			printf("updateTimestamps: block %d updated.\n", i);
 			fileTimestamps[i]=(uint32_t)tstamp;
+			fileChanged=1;
 		}
+	}
+	if (!fileChanged) {
+		//Nothing changed; no update needed.
+		printf("updateTimestamps: source file didn't change.\n");
+		free(fnbuf);
+		free(newBuf);
+		return 0;
 	}
 
 	//Write timestamps to temp timestamp file
@@ -280,6 +290,7 @@ typedef struct {
 	int block;
 } SortedTs;
 
+//for qsort
 int compareSortedTs(const void *a, const void *b) {
 	SortedTs *sa=(SortedTs*)a;
 	SortedTs *sb=(SortedTs*)b;
@@ -298,7 +309,9 @@ void mainLoop() {
 	SortedTs *sortedTs=malloc(sizeof(SortedTs)*(fileSize/BLOCKSIZE));
 	while(1) {
 		printf("Updating timestamps.\n");
-		currId=updateTimestamps();
+		int newId=updateTimestamps();
+		//Only change current ID if file actually updated.
+		if (newId!=0) currId=newId;
 
 		printf("Send out bitmap catalogue\n");
 		//Send out the bitmap catalogue
