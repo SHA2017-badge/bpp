@@ -1,6 +1,6 @@
 /*
-Trivial blkidcache that does zero caching at all. Use for testing or on backing that does not
-have issues reading/writing data often.
+Multi-level block cache. Keeps a few changeids in memory, plus the sectors which have
+that changeid. Delegates to the underlying block device for everything else.
 */
 #include <stdio.h>
 #include <stdint.h>
@@ -8,7 +8,7 @@ have issues reading/writing data often.
 #include <string.h>
 #include "blkidcache.h"
 
-#define LEVELS 4
+#define LEVELS 3
 
 struct BlkIdCacheHandle {
 	BlockdevifHandle *blkdev;

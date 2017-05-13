@@ -25,7 +25,7 @@ static int lastSentSerial=0; //sent to upper layer, that is
 void defecInit(RecvCb *cb, int maxLen) {
 	int i;
 	recvCb=cb;
-	for (i=0; i<FEC_M+1; i++) {
+	for (i=0; i<FEC_M; i++) {
 		parPacket[i]=malloc(maxLen);
 		parSerial[i]=0;
 	}

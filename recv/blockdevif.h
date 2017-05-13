@@ -10,7 +10,7 @@ typedef struct BlockdevifHandle BlockdevifHandle;
 typedef void (BlockdevifForEachBlockFn)(int blockno, uint32_t changeId, void *arg);
 
 typedef struct {
-	BlockdevifHandle* (*init)(char *desc, int size);
+	BlockdevifHandle* (*init)(void *desc, int size);
 	void (*setChangeID)(BlockdevifHandle *handle, int sector, uint32_t changeId);
 	uint32_t (*getChangeID)(BlockdevifHandle *handle, int sector);
 	int (*getSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff);

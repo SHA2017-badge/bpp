@@ -6,4 +6,8 @@
 
 extern BlockdevIf blockdefIfBdemu;
 
+
+typedef struct {
+	const char *file;
+} BlockdefIfBdemuDesc;
 #endif

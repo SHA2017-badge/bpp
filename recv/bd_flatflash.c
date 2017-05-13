@@ -19,7 +19,7 @@ it only saves the last change id and the bitmap of sectors that have that ID.
 #include "esp_partition.h"
 #include "structs.h"
 #include "blockdevif.h"
-
+#include "bd_flatflash.h"
 
 typedef struct {
 	uint32_t changeId; //current most recent changeid
@@ -31,39 +31,10 @@ struct BlockdevifHandle {
 	int size;	//in blocks
 	const esp_partition_t *part;
 	FlashMgmtSector *msec;
+	BlockdefIfFlatFlashDoneCb doneCb;
+	void *doneCbArg;
 };
 
-//Desc in this case is a hex number: HHLL, with h the major and l the minor partition ID.
-//Eg "2011" for major 32 minor 17
-BlockdevifHandle *blockdevifInit(char *desc, int size) {
-	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
-	if (h==NULL) goto error1;
-	int partid=strtol(desc, NULL, 16);
-	assert(partid>=0x100);
-	h->part=esp_partition_find_first(partid>>8, partid&0xff, NULL);
-	if (h->part==NULL) goto error2;
-	
-	h->size=size/BLOCKDEV_BLKSZ;
-	h->msec=malloc(h->size*8+sizeof(FlashMgmtSector));
-	h->msec->changeId=0;
-	if (h->msec->bitmap==NULL) goto error2;
-
-	if (h->part->size < size+BLOCKDEV_BLKSZ) {
-		printf("bd_flatflash: Part %s is %d bytes. Need %d bytes.\n", desc, h->part->size, size+BLOCKDEV_BLKSZ);
-		goto error3;
-	}
-
-	//Read in management data
-	esp_err_t r=esp_partition_read(h->part, h->size*BLOCKDEV_BLKSZ, h->msec, sizeof(FlashMgmtSector)+(h->size/8));
-	return h;
-
-error3:
-	free(h->msec);
-error2:
-	free(h);
-error1:
-	return NULL;
-}
 
 static void setNewChangeId(BlockdevifHandle *handle, uint32_t changeId) {
 	handle->msec->changeId=changeId;
@@ -75,11 +46,64 @@ static void flushMgmtSector(BlockdevifHandle *handle) {
 	esp_partition_write(handle->part, handle->size*BLOCKDEV_BLKSZ, handle->msec, sizeof(FlashMgmtSector)+(handle->size/8));
 }
 
+BlockdevifHandle *blockdevifInit(void *desc, int size) {
+	BlockdefIfFlatFlashDesc *bdesc=(BlockdefIfFlatFlashDesc*)desc;
+	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
+	if (h==NULL) goto error1;
+	h->part=esp_partition_find_first(bdesc->major, bdesc->minor, NULL);
+	if (h->part==NULL) goto error2;
+	
+	h->size=size/BLOCKDEV_BLKSZ;
+	h->msec=malloc((h->size/8)+sizeof(FlashMgmtSector));
+	if (h->msec==NULL) goto error2;
+
+	h->msec->changeId=0;
+	h->doneCb=bdesc->doneCb;
+	h->doneCbArg=bdesc->doneCbArg;
+
+	if (h->part->size < size+BLOCKDEV_BLKSZ) {
+		printf("bd_flatflash: Part %s is %d bytes. Need %d bytes.\n", desc, h->part->size, size+BLOCKDEV_BLKSZ);
+		goto error3;
+	}
+
+	//Read in management data
+	esp_err_t r=esp_partition_read(h->part, h->size*BLOCKDEV_BLKSZ, h->msec, sizeof(FlashMgmtSector)+(h->size/8));
+
+	//If not at minChangeId, make sure it is.
+	if (h->msec->changeId <= bdesc->minChangeId) {
+		h->msec->changeId = bdesc->minChangeId;
+		for (int i=0; i < h->size/8; i++) h->msec->bitmap[i]=0;
+		flushMgmtSector(h);
+	}
+
+	return h;
+
+error3:
+	free(h->msec);
+error2:
+	free(h);
+error1:
+	return NULL;
+}
+
 void blockdevifSetChangeID(BlockdevifHandle *handle, int sector, uint32_t changeId) {
 	if (changeId > handle->msec->changeId) setNewChangeId(handle, changeId);
-	if (changeId == handle->msec->changeId) {
+	if (changeId == handle->msec->changeId && (handle->msec->bitmap[sector/8] & (1<<(sector&7)))) {
+		//Sector indeed is updated now. Clear bit
 		handle->msec->bitmap[sector/8] &= ~(1<<(sector&7));
 		flushMgmtSector(handle);
+		
+		if (handle->doneCb) {
+			//Check if we're done; call callback if so.
+			int allDone=1;
+			for (int i=0; i<handle->size/8; i++) {
+				if (handle->msec->bitmap[i]!=0) {
+					allDone=0;
+					break;
+				}
+			}
+			if (allDone) handle->doneCb(handle->doneCbArg);
+		}
 	}
 }
 

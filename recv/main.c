@@ -39,6 +39,11 @@ static int createListenSock() {
 	return sock;
 }
 
+void flashDone(void *arg) {
+	printf("Flash done!\n");
+	exit(0);
+}
+
 void myRecv(uint8_t *packet, size_t len) {
 	printf("Got packet size %d: ", len);
 	if (packet!=NULL) {
@@ -57,7 +62,14 @@ int main(int argc, char** argv) {
 	serdecInit(hldemuxRecv);
 	
 //	blockdecodeInit(1, 8*1024*1024, &blockdefIfBdemu, "tst/blockdev");
-	blockdecodeInit(1, 8*1024*1024, &blockdefIfFlatFlash, "1234");
+	BlockdefIfFlatFlashDesc bdesc={
+		.major=0x12,
+		.minor=0x34,
+		.doneCb=flashDone,
+		.doneCbArg=NULL,
+		.minChangeId=1494667311
+	};
+	blockdecodeInit(1, 8*1024*1024, &blockdefIfFlatFlash, &bdesc);
 
 	subtitleInit();
 

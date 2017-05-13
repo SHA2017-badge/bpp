@@ -3,6 +3,6 @@
 
 #include "blockdevif.h"
 
-int blockdecodeInit(int type, int size, BlockdevIf *bdIf, char *bdevdesc);
+int blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc);
 
 #endif

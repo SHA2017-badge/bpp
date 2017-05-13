@@ -111,7 +111,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 				}
 			}
 		}
-	} else if (subtype==BDSYNC_SUBTYPE_CHANGE) {
+	} else if (subtype==BDSYNC_SUBTYPE_CHANGE && d->currentChangeID!=0) {
 		if (d->state != ST_WAIT_FOR_CATALOGPTR) {
 			BDPacketChange *p=(BDPacketChange*)data;
 			if (ntohl(p->changeId) != d->currentChangeID) {
@@ -121,7 +121,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 			}
 			int blk=ntohs(p->sector);
 			if (idcacheGet(d->idcache, blk)>d->currentChangeID) {
-				printf("WtF? Got newer block than sent? (us: %d, remote: %d)\n", idcacheGet(d->idcache, blk), d->currentChangeID);
+				printf("Blockdecode: WtF? Got newer block than sent? (us: %d, remote: %d)\n", idcacheGet(d->idcache, blk), d->currentChangeID);
 			} else if (idcacheGet(d->idcache, blk)!=d->currentChangeID) {
 				//Write block
 				d->bdif->setSectorData(d->bdev, blk, p->data, ntohl(p->changeId));
@@ -146,7 +146,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 	}
 }
 
-int blockdecodeInit(int type, int size, BlockdevIf *bdIf, char *bdevdesc) {
+int blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc) {
 	BlockDecodeHandle *d=malloc(sizeof(BlockDecodeHandle));
 	if (d==NULL) {
 		return 0;

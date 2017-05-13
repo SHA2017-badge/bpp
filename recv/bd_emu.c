@@ -14,6 +14,7 @@ Host-side blockdev emulation.
 #include <string.h>
 #include "structs.h"
 #include "blockdevif.h"
+#include "bd_emu.h"
 
 struct BlockdevifHandle {
 	int size;
@@ -22,18 +23,19 @@ struct BlockdevifHandle {
 	uint32_t *idData;
 };
 
-static BlockdevifHandle *blockdevifInit(char *desc, int size) {
+static BlockdevifHandle *blockdevifInit(void *desc, int size) {
+	BlockdefIfBdemuDesc *bdesc=(BlockdefIfBdemuDesc*)desc;
 	char buf[1024];
 	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
 	h->size=size;
-	h->bdFd=open(desc, O_RDWR|O_CREAT, 0644);
+	h->bdFd=open(bdesc->file, O_RDWR|O_CREAT, 0644);
 	if (h->bdFd<=0){
 		printf("opening bdev:\n");
-		perror(desc);
+		perror(bdesc->file);
 		goto error1;
 	}
 	ftruncate(h->bdFd, size);
-	sprintf(buf, "%s.ids", desc);
+	sprintf(buf, "%s.ids", bdesc->file);
 	h->idFd=open(buf, O_RDWR|O_CREAT, 0644);
 	if (h->idFd<=0){
 		printf("opening bdev idfile:\n");
@@ -44,7 +46,7 @@ static BlockdevifHandle *blockdevifInit(char *desc, int size) {
 	h->bdData=mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, h->bdFd, 0);
 	if (h->bdData==MAP_FAILED) {
 		printf("mmap bdev:\n");
-		perror(desc);
+		perror(bdesc->file);
 		goto error3;
 	}
 	h->idData=mmap(NULL, (size/BLOCKDEV_BLKSZ)*sizeof(uint32_t), PROT_READ|PROT_WRITE, MAP_SHARED, h->idFd, 0);
