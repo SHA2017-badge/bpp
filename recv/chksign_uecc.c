@@ -33,7 +33,7 @@ void chksignRecv(uint8_t *packet, size_t len) {
 	sha256_update(&sha, p->data, plLen);
 	sha256_final(&sha, hash);
 
-	//Sign packet
+	//Check signature of packet
 	int isOk=uECC_verify(public_key, hash, sizeof(hash), p->sig, uECC_secp256r1());
 	
 	if (isOk) {
