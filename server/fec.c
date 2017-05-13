@@ -54,6 +54,7 @@ void fecSend(uint8_t *packet, size_t len) {
 		//Zero out parity array for next set of packets.
 		memset(parPacket, 0, fecMaxPacketLen);
 	}
+	free(p);
 }
 
 

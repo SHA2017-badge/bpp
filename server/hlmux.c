@@ -28,6 +28,7 @@ void hlmuxSend(int type, int subtype, uint8_t *packet, size_t len) {
 	p->subtype=htons(subtype);
 	memcpy(p->data, packet, len);
 	sendCb((uint8_t*)p, len+sizeof(HlPacket));
+	free(p);
 }
 
 
