@@ -16,7 +16,7 @@ Every packet sent out is signed using ECDSA.
 #include "mbedtls/ecdsa.h"
 
 #include "../keys/pubkey.inc"
-#include "sha256.h"
+#include "mbedtls/sha256.h"
 
 static RecvCb *recvCb;
 
@@ -31,7 +31,6 @@ void chksignInit(RecvCb *cb) {
 	int r;
 	recvCb=cb;
 
-//	key.d=unknown secret value
 	r=mbedtls_ecp_group_load(&key.grp, ECPARAMS);
 	if (r) printf("group load failed\n");
 	r=mbedtls_mpi_read_binary(&key.Q.X, (char*)&public_key[0], 32);
@@ -47,17 +46,12 @@ void chksignRecv(uint8_t *packet, size_t len) {
 	SignedPacket *p=(SignedPacket*)packet;
 	int plLen=len-sizeof(SignedPacket);
 
-	SHA256_CTX sha;
 	uint8_t hash[32];
-	//Calculate hash of packet
-	sha256_init(&sha);
-	sha256_update(&sha, p->data, plLen);
-	sha256_final(&sha, hash);
-
-	
-//	int isOk=uECC_verify(public_key, hash, sizeof(hash), p->sig, uECC_secp256r1());
+	mbedtls_sha256(p->data, plLen, hash, 0);
 	
 	mbedtls_mpi mpir, mpis;
+	mbedtls_mpi_init(&mpir);
+	mbedtls_mpi_init(&mpis);
 	mbedtls_mpi_read_binary(&mpir, (char*)&p->sig[0], 32);
 	mbedtls_mpi_read_binary(&mpis, (char*)&p->sig[32], 32);
 	int isOk=!mbedtls_ecdsa_verify(&key.grp, hash, sizeof(hash), &key.Q, &mpir, &mpis);
