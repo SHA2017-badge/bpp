@@ -93,7 +93,7 @@ uint32_t *fileTimestamps;
 int bppCon;
 
 
-#if 1
+#if 0
 #define CYCLE_MS (60*1000) //cycle every ms
 #define PACKETS_PER_CYCLE 150
 #define OLDPACKETS_PER_CYCLE 50
@@ -301,7 +301,7 @@ int compareSortedTs(const void *a, const void *b) {
 
 void mainLoop() {
 	int oldPacketPos=0;
-	uint32_t currId;
+	uint32_t currId=(uint32_t)time(NULL);
 	time_t bitmapTimes[]={
 		60*1, 60*3, 60*5, 60*10, 60*15, 60*20, 60*30, 60*60,
 		60*60*3, 60*60*12, 60*60*24, 60*60*48, 0

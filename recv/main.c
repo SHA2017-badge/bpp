@@ -13,6 +13,8 @@
 
 #include "subtitle.h"
 #include "blockdecode.h"
+#include "bd_emu.h"
+#include "bd_flatflash.h"
 
 static int createListenSock() {
 	int sock;
@@ -54,7 +56,9 @@ int main(int argc, char** argv) {
 	defecInit(serdecRecv, 1400);
 	serdecInit(hldemuxRecv);
 	
-	blockdecodeInit(8*1024*1024);
+//	blockdecodeInit(1, 8*1024*1024, &blockdefIfBdemu, "tst/blockdev");
+	blockdecodeInit(1, 8*1024*1024, &blockdefIfFlatFlash, "1234");
+
 	subtitleInit();
 
 	while((len = recvfrom(sock, buff, sizeof(buff), 0, NULL, 0)) >= 0) {

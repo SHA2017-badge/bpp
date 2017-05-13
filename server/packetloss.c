@@ -11,8 +11,8 @@ Debugging: Mangle/drop a few packets here and there
 #include "sendif.h"
 #include "structs.h"
 
-#define MANGLE_PML 50
-#define DROP_PML 50
+#define MANGLE_PML 100
+#define DROP_PML 100
 
 static int sendMaxPktLen;
 static SendCb *sendCb;

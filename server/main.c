@@ -87,7 +87,7 @@ static void parseLine(char *buff, TcpClient *cl) {
 		char *n;
 		int subtype=strtol(buff+2, &n, 16);
 		int p=0;
-		if (n!=buff+2 && *n!=NULL) {
+		if (n!=buff+2 && *n!=0) {
 			//Convert hex to bin in-place
 			//Yes, this is ugly :/
 			int d;
@@ -132,7 +132,7 @@ static void handleClient(TcpClient *cl) {
 	} while (foundEnter);
 }
 
-#define SIMULATE_PACKET_LOSS
+//#define SIMULATE_PACKET_LOSS
 
 
 int main(int argc, char **argv) {

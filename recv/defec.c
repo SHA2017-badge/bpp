@@ -18,20 +18,19 @@ static RecvCb *recvCb;
 
 #define FEC_M 3
 
-static int curSerial=-1;
-static uint8_t* parPacket[FEC_M+1];
-static int parSerial[FEC_M+1];
+static uint8_t* parPacket[FEC_M];
+static uint32_t parSerial[FEC_M];
 static int lastSentSerial=0; //sent to upper layer, that is
-
 
 void defecInit(RecvCb *cb, int maxLen) {
 	int i;
 	recvCb=cb;
 	for (i=0; i<FEC_M+1; i++) {
 		parPacket[i]=malloc(maxLen);
-		parSerial[i]=-1;
+		parSerial[i]=0;
 	}
 }
+
 
 void defecRecv(uint8_t *packet, size_t len) {
 	if (len<sizeof(FecPacket)) return;
@@ -40,9 +39,29 @@ void defecRecv(uint8_t *packet, size_t len) {
 
 	int serial=ntohl(p->serial);
 	int spos=serial%(FEC_M+1);
-//	printf("Serial %d spos %d lastSent %d\n", serial, spos, lastSentSerial);
+//	printf("FEC: %d (%d) %s\n", serial, spos, (spos<FEC_M)?"D":"P");
 	if (spos<FEC_M) {
 		//Normal packet.
+		//First, check if we missed a parity packet.
+		int missedParityPacket=0;
+		for (int i=spos; i<FEC_M; i++) {
+			if (parSerial[i]!=0) missedParityPacket=1;
+		}
+		if (missedParityPacket) {
+//			printf("Fec: missed parity packet\n");
+			//Yes, we did. Dump out what's left in buffer for next time.
+			lastSentSerial++; //because we missed that parity packet
+			for (int i=spos; i<FEC_M; i++) {
+				if (parSerial[i]>=lastSentSerial) {
+					if (parSerial[i]!=lastSentSerial) recvCb(NULL, 0);
+					recvCb(parPacket[i], plLen);
+					lastSentSerial=parSerial[i];
+				}
+				parSerial[i]=0;
+			}
+		}
+
+		//Okay, we should be up to date with this sequence again.
 		memcpy(parPacket[spos], p->data, plLen);
 		parSerial[spos]=serial;
 		if (serial==lastSentSerial+1) {
@@ -51,8 +70,6 @@ void defecRecv(uint8_t *packet, size_t len) {
 			lastSentSerial=serial;
 		}
 	} else {
-//ToDo: What if we're missing the parity packet?
-
 		//Parity packet. See if we need to recover something.
 		int exSerial=serial-FEC_M;
 		int missing=-1;
@@ -69,7 +86,7 @@ void defecRecv(uint8_t *packet, size_t len) {
 			int exSerial=serial-FEC_M;
 			for (int i=missing; i<FEC_M; i++) {
 				if (parSerial[i]==exSerial) {
-					recvCb(parSerial[i],plLen);
+					recvCb(parPacket[i], plLen);
 				} else {
 					recvCb(NULL, 0);
 				}
@@ -77,7 +94,7 @@ void defecRecv(uint8_t *packet, size_t len) {
 			}
 		} else if (missing==-1) {
 			//Nothing missing in *this* segment. Discard parity packet.
-			int exSerial=serial-FEC_M;
+			int exSerial=serial-FEC_M-1; //We expect at least the last datapacket in the prev seq as the last one sent
 			if (exSerial>lastSentSerial) {
 				//Seems we're missing entire previous segments.
 				printf("FEC: Missing multiple segments! Packets %d - %d.\n", lastSentSerial, exSerial);
@@ -94,10 +111,11 @@ void defecRecv(uint8_t *packet, size_t len) {
 					}
 				}
 			}
-			int exSerial=serial-FEC_M;
+			//We expect at least the last datapacket in the prev seq as the last one sent.
+			int exSerial=serial-FEC_M-1;
 			if (exSerial>lastSentSerial) {
 				//Seems we're missing entire segments.
-				printf("FEC: Missing multiple segments! Packets %d - %d.\n", lastSentSerial, exSerial);
+				printf("FEC: Fixed 1 packet in this seg, but missing multiple segments! Packets %d - %d.\n", lastSentSerial, exSerial);
 				recvCb(NULL, 0);
 			}
 			for (int i=missing; i<FEC_M; i++) {
@@ -110,5 +128,6 @@ void defecRecv(uint8_t *packet, size_t len) {
 //			printf("FEC: Restored packet.\n");
 		}
 		lastSentSerial=serial;
+		for (int i=0; i<FEC_M; i++) parSerial[i]=0;
 	}
 }

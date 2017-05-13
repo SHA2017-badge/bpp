@@ -47,7 +47,7 @@ void hldemuxRecv(uint8_t *packet, size_t len) {
 	int found=0;
 	for (HlCallbackInfo *i=cbinfo; i!=NULL; i=i->next) {
 		if (i->type==type) {
-			i->cb(subtype, p->data, plLen);
+			i->cb(subtype, p->data, plLen, i->arg);
 			found=1;
 		}
 	}

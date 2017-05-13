@@ -1,6 +1,8 @@
 #ifndef BLOCKDECODE_H
 #define BLOCKDECODE_H
 
-void blockdecodeInit();
+#include "blockdevif.h"
+
+int blockdecodeInit(int type, int size, BlockdevIf *bdIf, char *bdevdesc);
 
 #endif

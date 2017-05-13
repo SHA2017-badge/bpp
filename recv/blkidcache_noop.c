@@ -9,19 +9,21 @@ have issues reading/writing data often.
 
 struct BlkIdCacheHandle {
 	BlockdevifHandle *blkdev;
+	BlockdevIf *bdif;
 };
 
-BlkIdCacheHandle *idcacheCreate(int size, BlockdevifHandle *blkdev) {
+BlkIdCacheHandle *idcacheCreate(int size, BlockdevifHandle *blkdev, BlockdevIf *bdif) {
 	BlkIdCacheHandle *ret=malloc(sizeof(BlkIdCacheHandle));
 	ret->blkdev=blkdev;
+	ret->bdif=bdif;
 	return ret;
 }
 
 void idcacheSet(BlkIdCacheHandle *h, int block, uint32_t id) {
-	blockdevifSetChangeID(h->blkdev, block, id);
+	h->bdif->setChangeID(h->blkdev, block, id);
 }
 
 uint32_t idcacheGet(BlkIdCacheHandle *h, int block) {
-	return blockdevifGetChangeID(h->blkdev, block);
+	return h->bdif->getChangeID(h->blkdev, block);
 }
 

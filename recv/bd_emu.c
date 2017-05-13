@@ -22,7 +22,7 @@ struct BlockdevifHandle {
 	uint32_t *idData;
 };
 
-BlockdevifHandle *blockdevifInit(char *desc, int size) {
+static BlockdevifHandle *blockdevifInit(char *desc, int size) {
 	char buf[1024];
 	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
 	h->size=size;
@@ -66,30 +66,41 @@ error1:
 	return NULL;
 }
 
-void blockdevifSetChangeID(BlockdevifHandle *handle, int sector, uint32_t changeId) {
+static void blockdevifSetChangeID(BlockdevifHandle *handle, int sector, uint32_t changeId) {
 	assert(handle && sector>=0 && sector<(handle->size/BLOCKDEV_BLKSZ));
 	handle->idData[sector]=changeId;
 }
 
-uint32_t blockdevifGetChangeID(BlockdevifHandle *handle, int sector) {
+static uint32_t blockdevifGetChangeID(BlockdevifHandle *handle, int sector) {
 	assert(handle && sector>=0 && sector<(handle->size/BLOCKDEV_BLKSZ));
 	return handle->idData[sector];
 }
 
-int blockdevifGetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff) {
+static int blockdevifGetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff) {
 	assert(handle && sector>=0 && sector<(handle->size/BLOCKDEV_BLKSZ));
 	memcpy(buff, &handle->bdData[sector*BLOCKDEV_BLKSZ], BLOCKDEV_BLKSZ);
 }
 
-int blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t changeId) {
+static int blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t changeId) {
 	assert(handle && sector>=0 && sector<(handle->size/BLOCKDEV_BLKSZ));
 	memcpy(&handle->bdData[sector*BLOCKDEV_BLKSZ], buff, BLOCKDEV_BLKSZ);
 	blockdevifSetChangeID(handle, sector, changeId);
 }
 
-void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {
+static void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {
 	for (int i=0; i<(handle->size/BLOCKDEV_BLKSZ); i++) {
 		cb(i, handle->idData[i], arg);
 	}
 }
+
+
+BlockdevIf blockdefIfBdemu={
+	.init=blockdevifInit,
+	.setChangeID=blockdevifSetChangeID,
+	.getChangeID=blockdevifGetChangeID,
+	.getSectorData=blockdevifGetSectorData,
+	.setSectorData=blockdevifSetSectorData,
+	.forEachBlock=blockdevifForEachBlock
+};
+
 
