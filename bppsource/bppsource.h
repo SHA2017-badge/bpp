@@ -4,7 +4,8 @@
 #include <stdint.h>
 
 int bppGetResponse(int sockfd, int *resp);
-int bppSend(int sockfd, int subtype, uint8_t *data, int len, int *resp);
+int bppQuery(int sockfd, int cmd, int *ret);
+int bppSend(int sockfd, int subtype, uint8_t *data, int len);
 int bppCreateConnection(char *hostname, int type);
 void bppClose(int sockfd);
 

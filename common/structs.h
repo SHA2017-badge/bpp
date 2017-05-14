@@ -46,6 +46,13 @@ typedef struct {
 } __attribute__ ((packed)) HlPacket;
 
 
+#define HKPACKET_SUBTYPE_NEXTCATALOG	0
+
+typedef struct {
+	uint32_t delayMs;
+} __attribute__ ((packed)) HKPacketNextCatalog;
+
+
 /* These are always sent in this order:
 BDSYNC_SUBTYPE_BITMAP * n
 BDSYNC_SUBTYPE_OLDERMARKER

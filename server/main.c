@@ -209,6 +209,7 @@ int main(int argc, char **argv) {
 			if (max<i->fd) max=i->fd;
 		}
 		int ms=cycleRemainingMs();
+		if (ms<0) ms=0;
 		tout.tv_sec=ms/1000;
 		tout.tv_usec=(ms%1000)*1000;
 		int r=select(max+1, &rfds, NULL, NULL, &tout);
@@ -227,6 +228,7 @@ int main(int argc, char **argv) {
 			}
 			//Start next cycle
 			newCycle();
+			continue; //because select may not have run
 		}
 
 		if (FD_ISSET(listenFd, &rfds)) {

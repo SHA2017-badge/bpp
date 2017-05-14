@@ -10,3 +10,4 @@ blocksend/blocksend
 lyric_test/lyrics
 lyric_test/never.txt
 recv/tst
+hksend/hkserver

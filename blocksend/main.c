@@ -92,39 +92,8 @@ uint8_t *fileContents;
 uint32_t *fileTimestamps;
 int bppCon;
 
-
-#if 0
-#define CYCLE_MS (60*1000) //cycle every ms
-#define PACKETS_PER_CYCLE 150
-#define OLDPACKETS_PER_CYCLE 50
-#define CATALOGMARKER_EVERY_PACKETS 8
-#else
-#define CYCLE_MS (10*1000) //cycle every ms
-#define PACKETS_PER_CYCLE 300
-#define OLDPACKETS_PER_CYCLE 150
-#define CATALOGMARKER_EVERY_PACKETS 8
-#endif
-
-static struct timeval cycleStart;
-static int cyclePos=0;
-
-static void startCycle() {
-	gettimeofday(&cycleStart, NULL);
-	cyclePos=0;
-}
-
-static void waitCycle(int i) {
-	struct timeval tv;
-	int64_t usec, usecTgt, waitTime;
-	gettimeofday(&tv, NULL);
-	usecTgt=cycleStart.tv_usec+(cycleStart.tv_sec*1000000LL);
-	usecTgt+=((CYCLE_MS*1000LL*i)/PACKETS_PER_CYCLE);
-	usec=tv.tv_usec+(tv.tv_sec*1000000LL);
-	waitTime=usecTgt-usec;
-//	printf("wait %ld\n", waitTime);
-	if (waitTime>0) usleep(waitTime);
-}
-
+int cfgPacketsPerMin;
+int cfgPctOldPackets;
 
 
 //Read in block file, see which blocks have changed and update the timestamp data
@@ -261,17 +230,6 @@ void sendChange(int i, uint32_t changeId) {
 	free(p);
 }
 
-//Send a packet indicating roughly when the next catalog will be. We're sending packet i now.
-void sendCatalogPtr(int i) {
-	BDPacketCatalogPtr p;
-	p.delayMs=htonl((CYCLE_MS*(PACKETS_PER_CYCLE-i))/PACKETS_PER_CYCLE);
-	int r=bppSend(bppCon, BDSYNC_SUBTYPE_CATALOGPTR, (uint8_t*)&p, sizeof(BDPacketCatalogPtr));
-	if (!r) {
-		printf("Error sending bitmap packet!\n");
-		exit(1);
-	}
-}
-
 void sendOlderMarker(uint32_t oldestNewTs, int secIdStart, int secIdEnd, int delayMs) {
 	BDPacketOldermarker p;
 	p.oldestNewTs=htonl(oldestNewTs);
@@ -296,6 +254,20 @@ int compareSortedTs(const void *a, const void *b) {
 	SortedTs *sb=(SortedTs*)b;
 	if (sa->ts==sb->ts) return (sa->block<sb->block)?-1:1;
 	return (sa->ts>sb->ts)?-1:1;
+}
+
+
+
+void waitTilRemaining(int timeMs) {
+	int remainingMs;
+	bppQuery(bppCon, 'e', &remainingMs);
+	if (remainingMs>(timeMs*3)) {
+		//Assume clock has rolled over; return immediately
+		return;
+	}
+	if (timeMs<remainingMs) {
+		usleep((remainingMs-timeMs)*1000);
+	}
 }
 
 
@@ -327,28 +299,32 @@ void mainLoop() {
 		}
 		qsort(sortedTs, fileSize/BLOCKSIZE, sizeof(SortedTs), compareSortedTs);
 
+		//Decide how many new and old packets we can send out.
+		int remainingMs;
+		bppQuery(bppCon, 'e', &remainingMs);
+		int pktCount=(cfgPacketsPerMin*remainingMs)/60000;
+		int oldPktCount=(cfgPctOldPackets*pktCount)/100;
+		int newPktCount=pktCount-oldPktCount;
+
 		printf("Send oldermarker\n");
 		//Send oldermarker
-		int lastPacketPos=oldPacketPos+OLDPACKETS_PER_CYCLE;
+		int lastPacketPos=oldPacketPos+oldPktCount;
 		if (lastPacketPos>=(fileSize/BLOCKSIZE)) lastPacketPos-=(fileSize/BLOCKSIZE); //wraparound
-		sendOlderMarker(sortedTs[(PACKETS_PER_CYCLE-OLDPACKETS_PER_CYCLE)].ts, 
+		sendOlderMarker(sortedTs[(newPktCount)].ts, 
 				oldPacketPos, lastPacketPos, 
-				(CYCLE_MS*(PACKETS_PER_CYCLE-OLDPACKETS_PER_CYCLE))/PACKETS_PER_CYCLE);
+				(remainingMs*(100-cfgPctOldPackets))/100);
 
-		startCycle();
 		int packet;
 		//Send new packets first.
-		for (packet=0; packet<(PACKETS_PER_CYCLE-OLDPACKETS_PER_CYCLE); packet++) {
-			waitCycle(packet);
+		for (packet=0; packet<newPktCount; packet++) {
+			waitTilRemaining(((pktCount-packet)*remainingMs)/pktCount);
 			printf("Sending (new) block %d.\n", sortedTs[packet].block);
-			if ((packet%CATALOGMARKER_EVERY_PACKETS)==0) sendCatalogPtr(packet);
 			sendChange(sortedTs[packet].block, currId);
 		}
 		//Followed by older packets.
-		for (; packet<PACKETS_PER_CYCLE; packet++) {
-			waitCycle(packet);
+		for (; packet<pktCount; packet++) {
 			printf("Sending (old) block %d.\n", oldPacketPos);
-			if ((packet%CATALOGMARKER_EVERY_PACKETS)==0) sendCatalogPtr(packet);
+			waitTilRemaining(((pktCount-packet)*remainingMs)/pktCount);
 			sendChange(oldPacketPos, currId);
 			oldPacketPos++;
 			if (oldPacketPos>=(fileSize/BLOCKSIZE)) oldPacketPos=0;
@@ -356,15 +332,20 @@ void mainLoop() {
 	}
 }
 
-
 int main(int argc, char **argv) {
 	char *fnbuf;
 	int r;
 	if (argc<2) {
-		printf("Usage: %s blockfile [stateprefix]\n", argv[0]);
+		printf("Usage: %s blockfile [stateprefix [packets-per-min [pct-oldpackets]]]\n", argv[0]);
 		exit(0);
 	}
 	blockfile=argv[1];
+
+	cfgPacketsPerMin=60;
+	cfgPctOldPackets=30;
+	if (argc>=3) cfgPacketsPerMin=atoi(argv[2]);
+	if (argc>=4) cfgPacketsPerMin=atoi(argv[3]);
+
 	prefix=(argc>2)?argv[2]:argv[1];
 	fnbuf=malloc(strlen(prefix)+32);
 

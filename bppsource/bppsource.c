@@ -21,7 +21,15 @@ int bppGetResponse(int sockfd, int *resp) {
 	return (buf[0]=='+')?1:0;
 }
 
-int bppSend(int sockfd, int subtype, uint8_t *data, int len, int *resp) {
+
+int bppQuery(int sockfd, int cmd, int *ret) {
+	char buf[3]={cmd, '\n', 0};
+	int i=write(sockfd, buf, strlen(buf));
+	if (i<=0) return -1;
+	return bppGetResponse(sockfd, ret);
+}
+
+int bppSend(int sockfd, int subtype, uint8_t *data, int len) {
 	char buf[len*2+8];
 	int i;
 	sprintf(buf, "p %02x \n", subtype);
@@ -31,8 +39,9 @@ int bppSend(int sockfd, int subtype, uint8_t *data, int len, int *resp) {
 //	printf("%s", buf);
 	i=write(sockfd, buf, 6+len*2);
 	if (i<=0) return -1;
-	return bppGetResponse(sockfd, resp);
+	return bppGetResponse(sockfd, NULL);
 }
+
 
 int bppCreateConnection(char *hostname, int type) {
 	int sockfd, portno, n;
@@ -68,7 +77,7 @@ int bppCreateConnection(char *hostname, int type) {
 
 	sprintf(buf, "t %x\n", type);
 	write(sockfd, buf, strlen(buf));
-	if (!bppGetResponse(sockfd)) {
+	if (!bppGetResponse(sockfd, NULL)) {
 		printf("Error setting type\n");
 		close(sockfd);
 		return -1;
