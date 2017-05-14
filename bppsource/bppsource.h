@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-int bppGetResponse(int sockfd);
-int bppSend(int sockfd, int subtype, uint8_t *data, int len);
+int bppGetResponse(int sockfd, int *resp);
+int bppSend(int sockfd, int subtype, uint8_t *data, int len, int *resp);
 int bppCreateConnection(char *hostname, int type);
 void bppClose(int sockfd);
 

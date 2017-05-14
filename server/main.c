@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <sys/types.h> 
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
@@ -26,11 +27,28 @@ struct TcpClient {
 	int type;
 	char buffer[MAX_LINE_LEN];
 	int pos;
+	int waitingForNextCycle;
 	TcpClient *next;
 };
 
-
 TcpClient *clients;
+
+
+int cycleLenMs=60000; //cycle defaults to 1 min
+struct timeval cycleStart;
+
+void newCycle() {
+	printf("New cycle! Cycle len is %d ms\n", cycleLenMs);
+	gettimeofday(&cycleStart, NULL);
+}
+
+int cycleRemainingMs() {
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	int ms=(cycleStart.tv_sec-now.tv_sec)*1000+(cycleStart.tv_usec-now.tv_usec)/1000;
+	ms+=cycleLenMs;
+	return ms;
+}
 
 
 int createSocket(int port) {
@@ -69,6 +87,13 @@ static void sendResp(TcpClient *cl, int isAck) {
 	write(cl->fd, buf, 2);
 }
 
+static void sendRespNum(TcpClient *cl, int isAck, int num) {
+	char buf[30];
+	sprintf(buf, "%s %d\n", isAck?"+":"-", num);
+	write(cl->fd, buf, strlen(buf));
+}
+
+
 static int hexbin(char c) {
 	if (c>='0' && c<='9') return c-'0';
 	if (c>='A' && c<='F') return (c-'A')+10;
@@ -79,11 +104,11 @@ static int hexbin(char c) {
 static void parseLine(char *buff, TcpClient *cl) {
 	if (strlen(buff)==0) return;
 	printf("Got from client: %s\n", buff);
-	if (buff[0]=='t') {
+	if (buff[0]=='t') { //set type
 		int type=strtol(buff+2, NULL, 16);
 		cl->type=type;
 		sendResp(cl, 1);
-	} else if (buff[0]=='p') {
+	} else if (buff[0]=='p') { //packet
 		char *n;
 		int subtype=strtol(buff+2, &n, 16);
 		int p=0;
@@ -105,6 +130,21 @@ static void parseLine(char *buff, TcpClient *cl) {
 		printf("Subtype %d, %d bytes\n", subtype, p/2);
 		hlmuxSend(cl->type, subtype, buff, p/2);
 		sendResp(cl, 1);
+	} else if (buff[0]=='w') {//wait for next cycle
+		cl->waitingForNextCycle=1;
+		//Don't respond yet; will do that when cycle ends
+	} else if (buff[0]=='c') { //Get cycle length, in ms
+		sendRespNum(cl, 1, cycleLenMs);
+	} else if (buff[0]=='e') { //Get time to cycle end, in ms
+		sendRespNum(cl, 1, cycleRemainingMs());
+	} else if (buff[0]=='C') { //Set cycle len
+		int i=strtol(&buff[1], NULL, 0);
+		if (i<5000) {
+			sendResp(cl, 0);
+		} else {
+			cycleLenMs=i;
+			sendResp(cl, 1);
+		}
 	} else {
 		sendResp(cl, 0);
 	}
@@ -156,9 +196,11 @@ int main(int argc, char **argv) {
 
 	listenFd=createSocket(2017);
 
+	newCycle();
 	while(1) {
 		int max;
 		fd_set rfds;
+		struct timeval tout;
 		FD_ZERO(&rfds);
 		FD_SET(listenFd, &rfds);
 		max=listenFd;
@@ -166,9 +208,25 @@ int main(int argc, char **argv) {
 			FD_SET(i->fd, &rfds);
 			if (max<i->fd) max=i->fd;
 		}
-		if (select(max+1, &rfds, NULL, NULL, NULL)==-1) {
+		int ms=cycleRemainingMs();
+		tout.tv_sec=ms/1000;
+		tout.tv_usec=(ms%1000)*1000;
+		int r=select(max+1, &rfds, NULL, NULL, &tout);
+		if (r==-1) {
 			perror("select");
 			exit(1);
+		}
+
+		if (cycleRemainingMs()<=0) {
+			//Warn all clients waiting for next cycle
+			for (TcpClient *i=clients; i!=NULL; i=i->next) {
+				if (i->waitingForNextCycle) {
+					sendResp(i, 1);
+					i->waitingForNextCycle=0;
+				}
+			}
+			//Start next cycle
+			newCycle();
 		}
 
 		if (FD_ISSET(listenFd, &rfds)) {
@@ -178,6 +236,7 @@ int main(int argc, char **argv) {
 			newc->fd=accept(listenFd, NULL, NULL);
 			newc->type=-1;
 			newc->next=clients;
+			newc->waitingForNextCycle=0;
 			clients=newc;
 			printf("Accepted client\n");
 		}
@@ -193,6 +252,7 @@ int main(int argc, char **argv) {
 				int r=read(i->fd, &i->buffer[i->pos], l);
 				if (r<1) {
 					//Error. Close socket, unlink client struct.
+					printf("Client closed socket; cleaning up.\n");
 					close(i->fd);
 					if (i==clients) {
 						clients=i->next;
@@ -203,7 +263,6 @@ int main(int argc, char **argv) {
 						j->next=i->next;
 					}
 					free(i);
-					printf("Client closed socket; cleaning up.\n");
 					//Loop iterator is broken now. Bail out, select will trigger a new loop.
 					break;
 				} else {

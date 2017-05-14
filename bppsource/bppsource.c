@@ -8,7 +8,7 @@
 #include <netdb.h>
 #include <stdint.h>
 
-int bppGetResponse(int sockfd) {
+int bppGetResponse(int sockfd, int *resp) {
 	char buf[128]={0};
 	int p=0;
 	if (sockfd<=0) return -1;
@@ -17,10 +17,11 @@ int bppGetResponse(int sockfd) {
 		if (r<=0) return -1;
 		p+=r;
 	}
+	if (resp!=NULL) *resp=strtol(&buf[1], NULL, 0);
 	return (buf[0]=='+')?1:0;
 }
 
-int bppSend(int sockfd, int subtype, uint8_t *data, int len) {
+int bppSend(int sockfd, int subtype, uint8_t *data, int len, int *resp) {
 	char buf[len*2+8];
 	int i;
 	sprintf(buf, "p %02x \n", subtype);
@@ -30,7 +31,7 @@ int bppSend(int sockfd, int subtype, uint8_t *data, int len) {
 //	printf("%s", buf);
 	i=write(sockfd, buf, 6+len*2);
 	if (i<=0) return -1;
-	return bppGetResponse(sockfd);
+	return bppGetResponse(sockfd, resp);
 }
 
 int bppCreateConnection(char *hostname, int type) {
