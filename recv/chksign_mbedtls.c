@@ -1,7 +1,7 @@
 /*
 Packet signature checking
 
-Every packet sent out is signed using ECDSA.
+Every packet sent out is signed using ECDSA/SHA256. We check it using MbedTLS functions.
 */
 #include <stdint.h>
 #include <stdlib.h>
@@ -20,7 +20,8 @@ Every packet sent out is signed using ECDSA.
 
 static RecvCb *recvCb;
 
-//We only use the key as a handy store for Q and grp.
+//We only use the key as a handy store for Q and grp; obviously we do not have the 
+//private key here.
 static mbedtls_ecp_keypair key;
 
 
@@ -31,6 +32,9 @@ void chksignInit(RecvCb *cb) {
 	int r;
 	recvCb=cb;
 
+	mbedtls_mpi_init(&key.Q.X);
+	mbedtls_mpi_init(&key.Q.Y);
+	mbedtls_mpi_init(&key.Q.Z);
 	r=mbedtls_ecp_group_load(&key.grp, ECPARAMS);
 	if (r) printf("group load failed\n");
 	r=mbedtls_mpi_read_binary(&key.Q.X, (char*)&public_key[0], 32);

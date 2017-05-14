@@ -1,7 +1,7 @@
 /*
 Packet signature checking
 
-Every packet sent out is signed using ECDSA.
+Every packet sent out is signed using ECDSA. We check that signature using the micro-ecc library.
 */
 #include <stdint.h>
 #include <stdlib.h>
