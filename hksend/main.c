@@ -23,6 +23,12 @@ int main(int argc, char **argv) {
 		bppQuery(con, 'e', &remaining);
 		n.delayMs=htonl(remaining);
 		bppSend(con, HKPACKET_SUBTYPE_NEXTCATALOG, (uint8_t*)&n, sizeof(n));
-		usleep(interval*1000);
+		printf("Next catalog in %d ms\n", remaining);
+		//Make sure hk packet is in catalog as well.
+		if (remaining>interval) {
+			usleep(interval*1000);
+		} else {
+			usleep(remaining*1000);
+		}
 	}
 }

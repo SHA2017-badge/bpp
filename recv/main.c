@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,9 @@
 #include "blockdecode.h"
 #include "bd_emu.h"
 #include "bd_flatflash.h"
+#include "hkpackets.h"
+
+
 
 static int createListenSock() {
 	int sock;
@@ -52,6 +56,9 @@ void myRecv(uint8_t *packet, size_t len) {
 	}
 }
 
+
+int simDeepSleepMs=0;
+
 int main(int argc, char** argv) {
 	int sock=createListenSock();
 	int len;
@@ -70,15 +77,26 @@ int main(int argc, char** argv) {
 		.minChangeId=1494667311
 	};
 	blockdecodeInit(1, 8*1024*1024, &blockdefIfFlatFlash, &bdesc);
-
 	subtitleInit();
+	hkpacketsInit();
 
 	while((len = recvfrom(sock, buff, sizeof(buff), 0, NULL, 0)) >= 0) {
 //		printf("Got UDP packet of %d byte\n", len);
 		chksignRecv(buff, len);
+		if (simDeepSleepMs!=0) break;
 	}
-	perror("recv");
 	
 	close(sock);
+
+	if (simDeepSleepMs) {
+		simDeepSleepMs-=200; //to be sure
+		printf("Deep sleep for %d sec.\n", simDeepSleepMs/1000);
+		if (simDeepSleepMs>0) usleep(simDeepSleepMs*1000);
+		printf("Restarting.\n");
+		//restart
+		execv(argv[0], argv);
+		printf("SHOULDNT COME HERE\n");
+	}
+
 	exit(0);
 }

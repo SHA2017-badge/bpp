@@ -8,17 +8,15 @@
 #include "blockdevif.h"
 #include "blockdecode.h"
 #include "blkidcache.h"
+#include "powerdown.h"
 
-
-#define ST_WAIT_FOR_CATALOGPTR 0
-#define ST_WAIT_CATALOG 1
-#define ST_WAIT_OLD 2
-#define ST_WAIT_DATA 3
+#define ST_WAIT_CATALOG 0
+#define ST_WAIT_OLD 1
+#define ST_WAIT_DATA 2
 
 
 typedef struct {
 	int state;
-	time_t sleepingUntil;
 	BlockdevifHandle *bdev;
 	BlockdevIf *bdif;
 	BlkIdCacheHandle *idcache;
@@ -37,21 +35,18 @@ static int allBlocksUpToDate(BlockDecodeHandle *d) {
 
 static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 	BlockDecodeHandle *d=(BlockDecodeHandle*)arg;
-	if (time(NULL) < d->sleepingUntil) {
-		//Still sleeping.
-		const char *tp="unknown";
-		if (subtype==BDSYNC_SUBTYPE_BITMAP) tp="bitmap";
-		if (subtype==BDSYNC_SUBTYPE_OLDERMARKER) tp="oldermarker";
-		if (subtype==BDSYNC_SUBTYPE_CHANGE) tp="change";
-		if (subtype==BDSYNC_SUBTYPE_CATALOGPTR) tp="catalogptr";
-		printf("Blockdecode: zzzzzzz... (ignoring type %s)\n", tp);
-		return;
-	}
+
+	const char *tp="unknown";
+	if (subtype==BDSYNC_SUBTYPE_BITMAP) tp="bitmap";
+	if (subtype==BDSYNC_SUBTYPE_OLDERMARKER) tp="oldermarker";
+	if (subtype==BDSYNC_SUBTYPE_CHANGE) tp="change";
+	printf("Blockdecode: Got subtype %s\n", tp);
 
 	if (subtype==BDSYNC_SUBTYPE_BITMAP) {
 		BDPacketBitmap *p=(BDPacketBitmap*)data;
 		uint32_t idOld=ntohl(p->changeIdOrig);
 		uint32_t idNew=ntohl(p->changeIdNew);
+		powerHold((int)arg);
 		printf("Got bitmap.\n");
 		d->currentChangeID=idNew;
 		//Update current block map: all blocks newer than changeIdOrig are still up-to-date and
@@ -64,8 +59,9 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 		//See if that action updated all blocks
 		if (allBlocksUpToDate(d)) {
 			//Yay, we can sleep.
-			d->state=ST_WAIT_FOR_CATALOGPTR;
-			printf("Got bitmap, still up-to-date.\n");
+			printf("All up to date. We can sleep.\n");
+			d->state=ST_WAIT_CATALOG;
+			powerCanSleep((int)arg);
 		} else {
 			d->state=ST_WAIT_DATA;
 			printf("Got bitmap.\n");
@@ -73,7 +69,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 	} else if (subtype==BDSYNC_SUBTYPE_OLDERMARKER) {
 		BDPacketOldermarker *p=(BDPacketOldermarker*)data;
 		//We're only interested in this if we actually need data.
-		if (d->state!=ST_WAIT_FOR_CATALOGPTR && d->state!=ST_WAIT_CATALOG) {
+		if (d->state!=ST_WAIT_CATALOG) {
 			//See if we're interested in the new blocks. We are if our oldest block
 			//is more recent than the oldest block sent in the new blocks.
 			//First, find oldest change id.
@@ -100,24 +96,31 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 					}
 				}
 				if (needOldBlocks) {
-					d->sleepingUntil=time(NULL)+(ntohl(p->delayMs)/1000)-1;
 					printf("Blockdecode: Skipping new packets. Sleeping %d ms.\n", ntohl(p->delayMs));
+					powerCanSleepFor((int)arg, p->delayMs);
 					d->state=ST_WAIT_DATA;
 				} else {
 					printf("Blockdev: Don't need any packets in this cycle. Sleeping\n");
 					//Next cycle is entirely useless. Wait for next catalog marker so we can sleep until
 					//the next catalog comes.
-					d->state=ST_WAIT_FOR_CATALOGPTR;
+					d->state=ST_WAIT_CATALOG;
+					powerCanSleep((int)arg);
 				}
 			}
 		}
-	} else if (subtype==BDSYNC_SUBTYPE_CHANGE && d->currentChangeID!=0) {
-		if (d->state != ST_WAIT_FOR_CATALOGPTR) {
+	} else if (subtype==BDSYNC_SUBTYPE_CHANGE) {
+		//If no bitmap has come in, don't handle changes.
+		if (d->currentChangeID==0) {
+			printf("Data ignored; waiting for bitmap first.\n");
+			return;
+		}
+		if (d->state != ST_WAIT_CATALOG) {
 			BDPacketChange *p=(BDPacketChange*)data;
 			if (ntohl(p->changeId) != d->currentChangeID) {
 				//Huh? Must've missed an entire catalog...
 				printf("Data changeid %d, last changeid I know of %d. Sleeping this cycle.\n", ntohl(p->changeId), d->currentChangeID);
-				d->state=ST_WAIT_FOR_CATALOGPTR;
+				d->state=ST_WAIT_CATALOG;
+				powerCanSleep((int)arg);
 			}
 			int blk=ntohs(p->sector);
 			if (idcacheGet(d->idcache, blk)>d->currentChangeID) {
@@ -133,16 +136,12 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 			if (allBlocksUpToDate(d)) {
 				//Yay, we can sleep.
 				printf("Blockdecode: Received change final packet. Waiting for catalog ptr to sleep.\n");
-				d->state=ST_WAIT_FOR_CATALOGPTR;
+				d->state=ST_WAIT_CATALOG;
+				powerCanSleep((int)arg);
 			}
 		}
-	} else if (subtype==BDSYNC_SUBTYPE_CATALOGPTR) {
-		if (d->state == ST_WAIT_FOR_CATALOGPTR) {
-			BDPacketCatalogPtr *p=(BDPacketCatalogPtr*)data;
-			d->state=ST_WAIT_CATALOG;
-			printf("Blockdecode: Got catalog ptr. Sleeping %d sec.\n", ntohl(p->delayMs)/1000);
-			d->sleepingUntil=time(NULL)+(ntohl(p->delayMs)/1000)-1;
-		}
+	} else {
+		printf("Blockdecode: unknown subtype %d\n", subtype);
 	}
 }
 
@@ -157,12 +156,14 @@ int blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc) {
 		free(d);
 		return 0;
 	}
-	d->state==ST_WAIT_FOR_CATALOGPTR;
+	d->state==ST_WAIT_CATALOG;
 	d->noBlocks=size/BLOCKDEV_BLKSZ;
 	d->idcache=idcacheCreate(d->noBlocks, d->bdev, bdIf);
 	d->bdif=bdIf;
 
 	hldemuxAddType(type, blockdecodeRecv, d);
+	powerHold((int)d);
+
 	return 1;
 }
 
