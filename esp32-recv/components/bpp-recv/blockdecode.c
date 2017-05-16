@@ -156,7 +156,7 @@ int blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc) {
 		free(d);
 		return 0;
 	}
-	d->state==ST_WAIT_CATALOG;
+	d->state=ST_WAIT_CATALOG;
 	d->noBlocks=size/BLOCKDEV_BLKSZ;
 	d->idcache=idcacheCreate(d->noBlocks, d->bdev, bdIf);
 	d->bdif=bdIf;

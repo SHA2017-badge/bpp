@@ -15,7 +15,7 @@ Every packet sent out is signed using ECDSA/SHA256. We check it using MbedTLS fu
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/ecdsa.h"
 
-#include "../keys/pubkey.inc"
+#include "pubkey.inc"
 #include "mbedtls/sha256.h"
 
 static RecvCb *recvCb;
@@ -37,11 +37,11 @@ void chksignInit(RecvCb *cb) {
 	mbedtls_mpi_init(&key.Q.Z);
 	r=mbedtls_ecp_group_load(&key.grp, ECPARAMS);
 	if (r) printf("group load failed\n");
-	r=mbedtls_mpi_read_binary(&key.Q.X, (char*)&public_key[0], 32);
+	r=mbedtls_mpi_read_binary(&key.Q.X, (unsigned char*)&public_key[0], 32);
 	if (r) printf("read_binary X failed\n");
-	r=mbedtls_mpi_read_binary(&key.Q.Y, (char*)&public_key[32], 32);
+	r=mbedtls_mpi_read_binary(&key.Q.Y, (unsigned char*)&public_key[32], 32);
 	if (r) printf("read_binary Y failed\n");
-	r=mbedtls_mpi_read_binary(&key.Q.Z, "\001", 1);
+	r=mbedtls_mpi_read_binary(&key.Q.Z, (unsigned char*)"\001", 1);
 	if (r) printf("read_binary Z failed\n");
 }
 
@@ -56,8 +56,8 @@ void chksignRecv(uint8_t *packet, size_t len) {
 	mbedtls_mpi mpir, mpis;
 	mbedtls_mpi_init(&mpir);
 	mbedtls_mpi_init(&mpis);
-	mbedtls_mpi_read_binary(&mpir, (char*)&p->sig[0], 32);
-	mbedtls_mpi_read_binary(&mpis, (char*)&p->sig[32], 32);
+	mbedtls_mpi_read_binary(&mpir, (unsigned char*)&p->sig[0], 32);
+	mbedtls_mpi_read_binary(&mpis, (unsigned char*)&p->sig[32], 32);
 	int isOk=!mbedtls_ecdsa_verify(&key.grp, hash, sizeof(hash), &key.Q, &mpir, &mpis);
 
 	if (isOk) {

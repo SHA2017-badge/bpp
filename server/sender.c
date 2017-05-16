@@ -75,16 +75,25 @@ int senderAddDest(char *hostname) {
 	return 1;
 }
 
+#define PAD_LENGTH 0
+
 void senderSendPkt(uint8_t *packet, size_t len) {
 	int r;
 	SenderDstItem *dst=senderDest;
+	len+=PAD_LENGTH; //HACK! Esp32 promiscuous mode seems to eat up some bytes.
+	uint8_t *ppacket=malloc(len+PAD_LENGTH);
+	memcpy(ppacket, packet, len);
+	len+=PAD_LENGTH;
 	while(dst) {
-		r=sendto(senderFd, packet, len, 0, dst->addr, dst->addrlen);
+//		for (int i=0; i<len; i++) ppacket[i]=i;
+//		printf("Sending 0x%X bytes\n", len);
+		r=sendto(senderFd, ppacket, len, 0, dst->addr, dst->addrlen);
 		if (r==-1) {
 			perror(dst->name);
 		}
 		dst=dst->next;
 	}
+	free(ppacket);
 }
 
 

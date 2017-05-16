@@ -9,10 +9,6 @@ Try to ressurect missing packets using FEC
 #include "recvif.h"
 #include "structs.h"
 
-#include "uECC.h"
-#include "../keys/pubkey.inc"
-#include "sha256.h"
-
 
 static RecvCb *recvCb;
 

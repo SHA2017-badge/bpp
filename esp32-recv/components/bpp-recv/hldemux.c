@@ -9,10 +9,6 @@ Distribute packets depending on type.
 #include "recvif.h"
 #include "structs.h"
 
-#include "uECC.h"
-#include "../keys/pubkey.inc"
-#include "sha256.h"
-
 #include "hldemux.h"
 
 typedef struct HlCallbackInfo HlCallbackInfo;

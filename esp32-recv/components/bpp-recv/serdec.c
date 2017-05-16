@@ -8,7 +8,7 @@ Decode the flexible length packets encoded in the fixed-length stream
 #include <arpa/inet.h>
 #include "recvif.h"
 #include "structs.h"
-#include "crc16.h"
+#include "rom/crc.h"
 #include "hexdump.h"
 
 #define MAX_PACKET_LEN (8*1024)
@@ -22,7 +22,6 @@ static int hdrBytesScanned=0; //for information purposes
 
 
 void serdecInit(RecvCb *cb) {
-	int i;
 	recvCb=cb;
 }
 
@@ -50,8 +49,10 @@ static void finishPacket() {
 	uint16_t crc, rcrc;
 	rcrc=ntohs(hdr.crc16);
 	hdr.crc16=0;
-	crc=crc16_block(0, (uint8_t*)&hdr, sizeof(SerdesHdr));
-	crc=crc16_block(crc, serPacket, plen);
+//	crc=crc16_block(0, (uint8_t*)&hdr, sizeof(SerdesHdr));
+//	crc=crc16_block(crc, serPacket, plen);
+	crc=crc16_le(0, (uint8_t*)&hdr, sizeof(SerdesHdr));
+	crc=crc16_le(crc, serPacket, plen);
 	if (crc!=rcrc) {
 		printf("Serdec: CRC16 error! Got %04X expected %04X\n", crc, rcrc);
 		//hexdump(serPacket, plen);

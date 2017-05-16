@@ -12,7 +12,6 @@ it only saves the last change id and the bitmap of sectors that have that ID.
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -62,12 +61,17 @@ BlockdevifHandle *blockdevifInit(void *desc, int size) {
 	h->doneCbArg=bdesc->doneCbArg;
 
 	if (h->part->size < size+BLOCKDEV_BLKSZ) {
-		printf("bd_flatflash: Part %s is %d bytes. Need %d bytes.\n", desc, h->part->size, size+BLOCKDEV_BLKSZ);
+		printf("bd_flatflash: Part 0x%X-0x%X is %d bytes. Need %d bytes.\n", bdesc->major, bdesc->minor, h->part->size, size+BLOCKDEV_BLKSZ);
 		goto error3;
 	}
 
 	//Read in management data
-	esp_err_t r=esp_partition_read(h->part, h->size*BLOCKDEV_BLKSZ, h->msec, sizeof(FlashMgmtSector)+(h->size/8));
+	esp_partition_read(h->part, h->size*BLOCKDEV_BLKSZ, h->msec, sizeof(FlashMgmtSector)+(h->size/8));
+
+	//Pin erased mgmt block to change id 0
+	if (h->msec->changeId==0xFFFFFFFF) {
+		h->msec->changeId=0;
+	}
 
 	//If not at minChangeId, make sure it is.
 	if (h->msec->changeId <= bdesc->minChangeId) {
@@ -125,6 +129,7 @@ int blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff,
 	esp_partition_erase_range(handle->part, sector*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);
 	esp_partition_write(handle->part, sector*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
 	blockdevifSetChangeID(handle, sector, changeId);
+	return 1;
 }
 
 void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {
