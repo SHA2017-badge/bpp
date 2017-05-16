@@ -1,7 +1,7 @@
-OBJS=main.o sender.o fec.o serdes.o ../common/crc16.o sha256.o uECC.o sign.o packetloss.o hlmux.o
+OBJS=main.o sender.o fec.o serdes.o ../common/crc16.o sha256.o uECC.o sign-mbedtls.o packetloss.o hlmux.o
 TARGET=bbpsender
 CFLAGS=-ggdb -I ../common -I ../micro-ecc -I ../sha256 -ggdb
-LDFLAGS=
+LDFLAGS=-lmbedtls -lmbedcrypto
 
 all: $(TARGET)
 

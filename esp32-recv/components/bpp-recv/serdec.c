@@ -8,7 +8,9 @@ Decode the flexible length packets encoded in the fixed-length stream
 #include <arpa/inet.h>
 #include "recvif.h"
 #include "structs.h"
+#ifndef HOST_BUILD
 #include "rom/crc.h"
+#endif
 #include "hexdump.h"
 
 #define MAX_PACKET_LEN (8*1024)
@@ -46,6 +48,7 @@ static int scanHdr(uint8_t in) {
 
 static void finishPacket() {
 	int plen=ntohs(hdr.len);
+#ifndef HOST_BUILD
 	uint16_t crc, rcrc;
 	rcrc=ntohs(hdr.crc16);
 	hdr.crc16=0;
@@ -59,6 +62,9 @@ static void finishPacket() {
 	} else {
 		recvCb(serPacket, plen);
 	}
+#else
+	recvCb(serPacket, plen);
+#endif
 }
 
 void serdecRecv(uint8_t *packet, size_t len) {
