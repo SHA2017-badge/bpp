@@ -81,7 +81,6 @@ int main(int argc, char** argv) {
 	hkpacketsInit();
 
 	while((len = recvfrom(sock, buff, sizeof(buff), 0, NULL, 0)) >= 0) {
-//		printf("Got UDP packet of %d byte\n", len);
 		chksignRecv(buff, len);
 		if (simDeepSleepMs!=0) break;
 	}

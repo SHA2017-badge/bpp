@@ -26,12 +26,13 @@ static SendCb *sendCb;
 static mbedtls_mpi privkey_mpi;
 static mbedtls_ecp_group group;
 
-#define ECPARAMS MBEDTLS_ECP_DP_SECP256R1
+#define ECPARAMS MBEDTLS_ECP_DP_SECP25519
 
 void signInit(SendCb *cb, int maxlen) {
 	int r;
 	sendCb=cb;
 	sendMaxPktLen=maxlen;
+	mbedtls_ecp_group_init(&group);
 	r=mbedtls_ecp_group_load(&group, ECPARAMS);
 	if (r) printf("group load failed\n");
 	r=mbedtls_mpi_read_binary(&privkey_mpi, (unsigned char*)&private_key[0], 32);
