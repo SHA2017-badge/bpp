@@ -14,6 +14,7 @@ parity packet.
 #include <arpa/inet.h>
 #include "sendif.h"
 #include "structs.h"
+#include <time.h>
 
 //Emit a parity packet every FEC_M packets
 #define FEC_M 3
@@ -23,13 +24,23 @@ static SendCb *sendCb;
 static int serial=0;
 static uint8_t *parPacket;
 
+static time_t tsLastSaved;
+
+#define TSFILE "timestamp.txt"
 
 void fecInit(SendCb *cb, int maxlen) {
 	sendCb=cb;
 	sendMaxPktLen=maxlen;
 	parPacket=malloc(maxlen);
 	memset(parPacket, 0, maxlen);
-	serial=0;
+	char buff[128];
+	FILE *f=fopen(TSFILE, "r");
+	if (f!=NULL) {
+		fgets(buff, 127, f);
+		serial=atoi(buff);
+		fclose(f);
+	}
+	tsLastSaved=time(NULL);
 }
 
 
@@ -53,6 +64,15 @@ void fecSend(uint8_t *packet, size_t len) {
 		serial++;
 		//Zero out parity array for next set of packets.
 		memset(parPacket, 0, fecMaxPacketLen);
+	}
+	//Save timestamp in case of crash/quit every 10 secs
+	if (time(NULL)-tsLastSaved > 10) {
+		FILE *f;
+		f=fopen(TSFILE".tmp", "w");
+		fprintf(f, "%d", (int)tsLastSaved);
+		fclose(f);
+		rename(TSFILE".tmp", TSFILE);
+		tsLastSaved=time(NULL);
 	}
 	free(p);
 }
