@@ -15,14 +15,14 @@
 #define ST_WAIT_DATA 2
 
 
-typedef struct {
+struct BlockDecodeHandle{
 	int state;
 	BlockdevifHandle *bdev;
 	BlockdevIf *bdif;
 	BlkIdCacheHandle *idcache;
 	int noBlocks;
 	int currentChangeID;
-} BlockDecodeHandle;
+};
 
 
 static int allBlocksUpToDate(BlockDecodeHandle *d) {
@@ -33,6 +33,20 @@ static int allBlocksUpToDate(BlockDecodeHandle *d) {
 }
 
 
+
+void blockdecodeStatus(BlockDecodeHandle *d) {
+	printf("Blockdev status: changeid %d, blocks: (* is up-to-date)\n", d->currentChangeID);
+	for (int i=0; i<d->noBlocks; i++) {
+		if (idcacheGet(d->idcache, i) < d->currentChangeID) printf("."); else printf("*");
+	}
+	printf("\n");
+}
+
+
+void blockdecodeShutDown(BlockDecodeHandle *d) {
+	idcacheFlushToStorage(d->idcache);
+}
+
 static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 	BlockDecodeHandle *d=(BlockDecodeHandle*)arg;
 
@@ -40,22 +54,28 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 	if (subtype==BDSYNC_SUBTYPE_BITMAP) tp="bitmap";
 	if (subtype==BDSYNC_SUBTYPE_OLDERMARKER) tp="oldermarker";
 	if (subtype==BDSYNC_SUBTYPE_CHANGE) tp="change";
-	printf("Blockdecode: Got subtype %s\n", tp);
+	//printf("Blockdecode: Got subtype %s\n", tp);
 
 	if (subtype==BDSYNC_SUBTYPE_BITMAP) {
 		BDPacketBitmap *p=(BDPacketBitmap*)data;
 		uint32_t idOld=ntohl(p->changeIdOrig);
 		uint32_t idNew=ntohl(p->changeIdNew);
+		uint16_t noBits=ntohs(p->noBits);
 		powerHold((int)arg);
-		printf("Got bitmap.\n");
 		d->currentChangeID=idNew;
+		printf("Bitmap %d bits for %d blocks.\n", (len-sizeof(BDPacketBitmap))*8, d->noBlocks);
+		if ((len-sizeof(BDPacketBitmap)) > d->noBlocks/8) return; //encroyable!
 		//Update current block map: all blocks newer than changeIdOrig are still up-to-date and
 		//can be updated to changeIdNew.
-		for (int i=0; i<d->noBlocks; i++) {
-			if (p->bitmap[i/8]&(1<<(i&7))) {
+		int i;
+		for (i=0; i<noBits; i++) {
+			//Update if bit is 1 in bitmap
+			if ( i >= (len-sizeof(BDPacketBitmap))*8 || p->bitmap[i/8]&(1<<(i&7))) {
 				if (idcacheGet(d->idcache, i)>=idOld) idcacheSet(d->idcache, i, d->currentChangeID);
 			}
 		}
+		//Rest of sectors not in bitmap is always assumed to be up-to-date.
+		for (; i<d->noBlocks; i++) idcacheSet(d->idcache, i, d->currentChangeID);
 		//See if that action updated all blocks
 		if (allBlocksUpToDate(d)) {
 			//Yay, we can sleep.
@@ -112,6 +132,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 		//If no bitmap has come in, don't handle changes.
 		if (d->currentChangeID==0) {
 			printf("Data ignored; waiting for bitmap first.\n");
+			powerCanSleep((int)arg);
 			return;
 		}
 		if (d->state != ST_WAIT_CATALOG) {
@@ -127,7 +148,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 				printf("Blockdecode: WtF? Got newer block than sent? (us: %d, remote: %d)\n", idcacheGet(d->idcache, blk), d->currentChangeID);
 			} else if (idcacheGet(d->idcache, blk)!=d->currentChangeID) {
 				//Write block
-				d->bdif->setSectorData(d->bdev, blk, p->data, ntohl(p->changeId));
+				idcacheSetSectorData(d->idcache, blk, p->data, ntohl(p->changeId));
 				printf("Blockdecode: Got change for block %d. Writing to disk.\n", blk);
 			} else {
 				printf("Blockdecode: Got change for block %d. Already had this change.\n", blk);
@@ -145,10 +166,10 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 	}
 }
 
-int blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc) {
+BlockDecodeHandle *blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc) {
 	BlockDecodeHandle *d=malloc(sizeof(BlockDecodeHandle));
 	if (d==NULL) {
-		return 0;
+		return NULL;
 	}
 	memset(d, 0, sizeof(BlockDecodeHandle));
 	d->bdev=bdIf->init(bdevdesc, size);
@@ -164,6 +185,6 @@ int blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc) {
 	hldemuxAddType(type, blockdecodeRecv, d);
 	powerHold((int)d);
 
-	return 1;
+	return d;
 }
 

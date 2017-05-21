@@ -5,6 +5,8 @@
 #include "powerdown.h"
 
 typedef struct PowerItem PowerItem;
+static PowerDownCb *pdCb=NULL;
+static void *pdCbArg=NULL;
 
 #define ST_ACTIVE 0
 #define ST_CANSLEEP 1
@@ -33,14 +35,8 @@ static PowerItem *findItem(int ref) {
 }
 
 
-extern int simDeepSleepMs;
-
 static void doSleep(int sleepMs) {
-#if 0
-	//deep sleep etc
-#else
-	simDeepSleepMs=sleepMs;
-#endif
+	if (pdCb) pdCb(sleepMs, pdCbArg);
 }
 
 static void checkCanSleep() {
@@ -80,6 +76,7 @@ void powerHold(int ref) {
 }
 
 void powerCanSleepFor(int ref, int delayMs) {
+//	printf("canSleepFor %d\n", delayMs);
 	PowerItem *p=findItem(ref);
 	gettimeofday(&p->sleepUntil, NULL);
 	p->sleepUntil.tv_sec+=delayMs/1000;
@@ -96,4 +93,9 @@ void powerCanSleep(int ref) {
 	PowerItem *p=findItem(ref);
 	p->state=ST_CANSLEEP;
 	checkCanSleep();
+}
+
+void powerDownMgrInit(PowerDownCb *cb, void *arg) {
+	pdCb=cb;
+	pdCbArg=arg;
 }

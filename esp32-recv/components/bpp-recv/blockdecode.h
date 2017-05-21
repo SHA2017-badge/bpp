@@ -3,6 +3,12 @@
 
 #include "blockdevif.h"
 
-int blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc);
+typedef struct BlockDecodeHandle BlockDecodeHandle;
+
+void blockdecodeStatus(BlockDecodeHandle *d);
+
+BlockDecodeHandle *blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *bdevdesc);
+
+void blockdecodeShutDown(BlockDecodeHandle *d);
 
 #endif

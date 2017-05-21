@@ -102,6 +102,9 @@ uint8_t *fileContents;
 uint32_t *fileTimestamps;
 int bppCon;
 
+int noBlocks() {
+	return ((fileSize+BLOCKSIZE-1)/BLOCKSIZE);
+}
 
 
 //Read in block file, see which blocks have changed and update the timestamp data
@@ -110,7 +113,6 @@ int bppCon;
 //If not updated, returns 0 and updates nothing.
 //If updated, results in an updated fileContents and fileTimestamps variable.
 uint32_t updateTimestamps() {
-	char *newBuf=malloc(fileSize);
 	time_t tstamp=time(NULL);
 	int f=open(myConfig.file, O_RDONLY);
 	if (f<=0) {
@@ -122,6 +124,8 @@ uint32_t updateTimestamps() {
 		printf("ERROR: File size bigger than size configured! Truncating.\n");
 		fileSize=myConfig.size;
 	}
+	char *newBuf=malloc(noBlocks()*BLOCKSIZE);
+	memset(newBuf, 0xff, noBlocks()*BLOCKSIZE);
 	lseek(f, 0, SEEK_SET);
 	int r=read(f, newBuf, fileSize);
 	if (r!=fileSize) {
@@ -149,7 +153,7 @@ uint32_t updateTimestamps() {
 
 	//Update timestamps
 	int fileChanged=0;
-	for (int i=0; i<fileSize/BLOCKSIZE; i++) {
+	for (int i=0; i<noBlocks(); i++) {
 		if (memcmp(&fileContents[i*BLOCKSIZE], &newBuf[i*BLOCKSIZE], BLOCKSIZE)!=0) {
 			printf("updateTimestamps: block %d updated.\n", i);
 			fileTimestamps[i]=(uint32_t)tstamp;
@@ -172,8 +176,8 @@ uint32_t updateTimestamps() {
 		perror("opening timestamp_tmp");
 		exit(1);
 	}
-	r=write(f, fileTimestamps, (fileSize/BLOCKSIZE)*sizeof(uint32_t));
-	if (r!=(fileSize/BLOCKSIZE)*sizeof(uint32_t)) {
+	r=write(f, fileTimestamps, (noBlocks())*sizeof(uint32_t));
+	if (r!=(noBlocks())*sizeof(uint32_t)) {
 		printf("%s: (%d/%d)", fnbuf, r, fileSize);
 		perror("writing timestamp_tmp");
 		exit(1);
@@ -213,13 +217,14 @@ uint32_t updateTimestamps() {
 //update its update ID to nowts without receiving any new data; the old data is still current.
 void sendBitmapFor(uint32_t ts, uint32_t nowts) {
 	BDPacketBitmap *p;
-	int bitmapBytes=((fileSize/BLOCKSIZE)+7)/8;
+	int bitmapBytes=((noBlocks())+7)/8;
 	p=malloc(sizeof(BDPacketBitmap)+bitmapBytes);
 	memset(p, 0, sizeof(BDPacketBitmap)+bitmapBytes);
 	p->changeIdOrig=htonl(ts);
 	p->changeIdNew=htonl(nowts);
+	p->noBits=htons(noBlocks());
 	int i;
-	for (i=0; i<(fileSize/BLOCKSIZE); i++) {
+	for (i=0; i<(noBlocks()); i++) {
 		if (fileTimestamps[i]<ts) p->bitmap[i/8]|=(1<<(i&7));
 	}
 	//Fill last bits of byte with FF
@@ -295,7 +300,7 @@ void mainLoop() {
 		60*1, 60*3, 60*5, 60*10, 60*15, 60*20, 60*30, 60*60,
 		60*60*3, 60*60*12, 60*60*24, 60*60*48, 0
 	};
-	SortedTs *sortedTs=malloc(sizeof(SortedTs)*(fileSize/BLOCKSIZE));
+	SortedTs *sortedTs=malloc(sizeof(SortedTs)*(noBlocks()));
 	while(1) {
 		printf("Updating timestamps.\n");
 		int newId=updateTimestamps();
@@ -310,11 +315,11 @@ void mainLoop() {
 
 		//Sort timestamps in a descending order (newest-first) so we can send out data that has changed
 		//the most recent the earliest.
-		for (int i=0; i<fileSize/BLOCKSIZE; i++) {
+		for (int i=0; i<noBlocks(); i++) {
 			sortedTs[i].ts=fileTimestamps[i];
 			sortedTs[i].block=i;
 		}
-		qsort(sortedTs, fileSize/BLOCKSIZE, sizeof(SortedTs), compareSortedTs);
+		qsort(sortedTs, noBlocks(), sizeof(SortedTs), compareSortedTs);
 
 		//Decide how many new and old packets we can send out.
 		int remainingMs;
@@ -326,7 +331,7 @@ void mainLoop() {
 		printf("Send oldermarker\n");
 		//Send oldermarker
 		int lastPacketPos=oldPacketPos+oldPktCount;
-		if (lastPacketPos>=(fileSize/BLOCKSIZE)) lastPacketPos-=(fileSize/BLOCKSIZE); //wraparound
+		if (lastPacketPos>=(noBlocks())) lastPacketPos-=(noBlocks()); //wraparound
 		sendOlderMarker(sortedTs[(newPktCount)].ts, 
 				oldPacketPos, lastPacketPos, 
 				(remainingMs*(100-myConfig.pctoldpackets))/100);
@@ -344,8 +349,10 @@ void mainLoop() {
 			waitTilRemaining(((pktCount-packet)*remainingMs)/pktCount);
 			sendChange(oldPacketPos, currId);
 			oldPacketPos++;
-			if (oldPacketPos>=(fileSize/BLOCKSIZE)) oldPacketPos=0;
+			if (oldPacketPos>=(noBlocks())) oldPacketPos=0;
 		}
+		bppQuery(bppCon, 'e', &remainingMs);
+		usleep(remainingMs*1000+500000);
 	}
 }
 
@@ -443,7 +450,7 @@ int main(int argc, char **argv) {
 	}
 	free(fnbuf);
 
-	printf("Initialized. File size is %d K, %d blocks.\n", fileSize/1024, fileSize/BLOCKSIZE);
+	printf("Initialized. File size is %d K, %d blocks.\n", fileSize/1024, noBlocks());
 	mainLoop();
 }
 

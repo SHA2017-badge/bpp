@@ -72,11 +72,13 @@ wait till the next catalog.
 
 /*
  Bitmap type. If the sectors marked by an 1 in the bitmap have a changeID that is newer than
- changeIdOrig, they can be marked as changeID changeIdNew without changing the contents.
+ changeIdOrig, they can be marked as changeID changeIdNew without changing the contents. If the
+ dev has any sectors > noBits, they can always be marked as being current.
 */
 typedef struct {
 	uint32_t changeIdOrig;
 	uint32_t changeIdNew;
+	uint16_t noBits;
 	uint8_t bitmap[];
 } __attribute__ ((packed)) BDPacketBitmap;
 
@@ -108,14 +110,5 @@ typedef struct {
 	uint16_t sector;
 	uint8_t data[];
 } __attribute__ ((packed)) BDPacketChange;
-
-/*
- Opaque bdPacket struct.
-*/
-typedef struct {
-	uint8_t type;
-	uint8_t data[];
-} __attribute__ ((packed)) BDPacket;
-
 
 

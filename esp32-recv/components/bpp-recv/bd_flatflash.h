@@ -5,7 +5,7 @@
 
 extern BlockdevIf blockdefIfFlatFlash;
 
-typedef void (*BlockdefIfFlatFlashDoneCb)(void *arg);
+typedef void (*BlockdefIfFlatFlashDoneCb)(uint32_t changeid, void *arg);
 
 typedef struct {
 	int major;

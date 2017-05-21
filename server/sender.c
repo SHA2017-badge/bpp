@@ -94,6 +94,7 @@ void senderSendPkt(uint8_t *packet, size_t len) {
 		dst=dst->next;
 	}
 	free(ppacket);
+	usleep(200000); //HACK! Delay 100ms
 }
 
 

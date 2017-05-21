@@ -106,7 +106,7 @@ void blockdevifSetChangeID(BlockdevifHandle *handle, int sector, uint32_t change
 					break;
 				}
 			}
-			if (allDone) handle->doneCb(handle->doneCbArg);
+			if (allDone) handle->doneCb(changeId, handle->doneCbArg);
 		}
 	}
 }

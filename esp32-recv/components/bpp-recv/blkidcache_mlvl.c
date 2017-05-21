@@ -73,10 +73,18 @@ void idcacheSet(BlkIdCacheHandle *h, int block, uint32_t id) {
 	}
 }
 
+void idcacheSetSectorData(BlkIdCacheHandle *h, int block, uint8_t *data, uint32_t id) {
+	idcacheSet(h, block, id);
+	h->bdif->setSectorData(h->blkdev, block, data, id);
+}
+
+
 uint32_t idcacheGet(BlkIdCacheHandle *h, int block) {
 	for (int i=0; i<LEVELS; i++) {
 		if (h->bmp[i][block/8] & (1<<(block&7))) return h->id[i];
 	}
 	return h->bdif->getChangeID(h->blkdev, block);
 }
+
+
 

@@ -1,10 +1,11 @@
 #Makefile for a host build of the receiver.
 
-OBJS=main.o chksign_mbedtls.o defec.o serdec.o hexdump.o subtitle.o hldemux.o \
-		bd_emu.o blockdecode.o blkidcache_mlvl.o partemu/partemu.o bd_flatflash.o hkpackets.o powerdown.o
+OBJS=main.o chksign_ed25519.o defec.o serdec.o hexdump.o subtitle.o hldemux.o \
+		bd_emu.o blockdecode.o blkidcache_mlvl.o partemu/partemu.o bd_flatflash.o\
+		 hkpackets.o powerdown.o
 TARGET=recv
-CFLAGS=-ggdb -I ../common -I ../micro-ecc -I partemu -Og -DHOST_BUILD
-LDFLAGS=-lmbedtls -lmbedcrypto
+CFLAGS=-ggdb -I ../common -I ../micro-ecc -I ../../../ed25519/src -I partemu -Og -DHOST_BUILD
+LDFLAGS=-lmbedtls -lmbedcrypto ../../../ed25519/src/libed25519.a
 
 all: $(TARGET)
 

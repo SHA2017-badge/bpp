@@ -11,6 +11,7 @@ Decode the flexible length packets encoded in the fixed-length stream
 #ifndef HOST_BUILD
 #include "rom/crc.h"
 #endif
+#include "crc16-ccitt.h"
 #include "hexdump.h"
 
 #define MAX_PACKET_LEN (8*1024)
@@ -52,10 +53,10 @@ static void finishPacket() {
 	uint16_t crc, rcrc;
 	rcrc=ntohs(hdr.crc16);
 	hdr.crc16=0;
-//	crc=crc16_block(0, (uint8_t*)&hdr, sizeof(SerdesHdr));
-//	crc=crc16_block(crc, serPacket, plen);
-	crc=crc16_le(0, (uint8_t*)&hdr, sizeof(SerdesHdr));
-	crc=crc16_le(crc, serPacket, plen);
+//	crc=crc16_le(0, (uint8_t*)&hdr, sizeof(SerdesHdr));
+//	crc=crc16_le(crc, serPacket, plen);
+	crc=crc16_ccitt(0, (uint8_t*)&hdr, sizeof(SerdesHdr));
+	crc=crc16_ccitt(crc, serPacket, plen);
 	if (crc!=rcrc) {
 		printf("Serdec: CRC16 error! Got %04X expected %04X\n", crc, rcrc);
 		//hexdump(serPacket, plen);

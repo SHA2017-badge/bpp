@@ -17,6 +17,7 @@ static RecvCb *recvCb;
 static uint8_t* parPacket[FEC_M];
 static uint32_t parSerial[FEC_M];
 static int lastSentSerial=0; //sent to upper layer, that is
+static int lastRecvSerial=0;
 
 void defecInit(RecvCb *cb, int maxLen) {
 	int i;
@@ -34,8 +35,11 @@ void defecRecv(uint8_t *packet, size_t len) {
 	int plLen=len-sizeof(FecPacket);
 
 	int serial=ntohl(p->serial);
+	if (serial<=lastRecvSerial) return; //dup
+	lastRecvSerial=serial;
+
 	int spos=serial%(FEC_M+1);
-//	printf("FEC: %d (%d) %s\n", serial, spos, (spos<FEC_M)?"D":"P");
+	printf("FEC: %d (%d) %s\n", serial, spos, (spos<FEC_M)?"D":"P");
 	if (spos<FEC_M) {
 		//Normal packet.
 		//First, check if we missed a parity packet.
@@ -44,7 +48,7 @@ void defecRecv(uint8_t *packet, size_t len) {
 			if (parSerial[i]!=0) missedParityPacket=1;
 		}
 		if (missedParityPacket) {
-//			printf("Fec: missed parity packet\n");
+			printf("Fec: missed parity packet\n");
 			//Yes, we did. Dump out what's left in buffer for next time.
 			lastSentSerial++; //because we missed that parity packet
 			for (int i=spos; i<FEC_M; i++) {
@@ -52,6 +56,8 @@ void defecRecv(uint8_t *packet, size_t len) {
 					if (parSerial[i]!=lastSentSerial) recvCb(NULL, 0);
 					recvCb(parPacket[i], plLen);
 					lastSentSerial=parSerial[i];
+				} else {
+					recvCb(NULL, 0);
 				}
 				parSerial[i]=0;
 			}
@@ -80,9 +86,12 @@ void defecRecv(uint8_t *packet, size_t len) {
 			printf("Fec: Missed too many packets in segment\n");
 			//Still send packets we do have.
 			int exSerial=serial-FEC_M;
-			for (int i=missing; i<FEC_M; i++) {
+			//If we missed the entire prev fec unit, notify higher layer.
+			if (lastSentSerial<(exSerial-2)) recvCb(NULL, 0);
+			for (int i=0; i<FEC_M; i++) {
 				if (parSerial[i]==exSerial) {
 					recvCb(parPacket[i], plLen);
+					lastSentSerial=i;
 				} else {
 					recvCb(NULL, 0);
 				}

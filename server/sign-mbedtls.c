@@ -26,7 +26,7 @@ static SendCb *sendCb;
 static mbedtls_mpi privkey_mpi;
 static mbedtls_ecp_group group;
 
-#define ECPARAMS MBEDTLS_ECP_DP_SECP25519
+#define ECPARAMS MBEDTLS_ECP_DP_CURVE25519
 
 void signInit(SendCb *cb, int maxlen) {
 	int r;
@@ -54,9 +54,15 @@ void signSend(uint8_t *packet, size_t len) {
 	mbedtls_mpi hr, hs;
 	mbedtls_mpi_init(&hr);
 	mbedtls_mpi_init(&hs);
-	mbedtls_ecdsa_sign_det(&group, &hr, &hs, &privkey_mpi, hash, 32, MBEDTLS_MD_SHA256);
-	mbedtls_mpi_write_binary(&hr, p->sig, 32);
-	mbedtls_mpi_write_binary(&hs, p->sig+32, 32);
+	int ret=mbedtls_ecdsa_sign_det(&group, &hr, &hs, &privkey_mpi, hash, 32, MBEDTLS_MD_SHA256);
+	if (ret!=0) {
+		printf("Sign failed: %d\n", ret);
+		exit(0);
+	}
+	
+	mbedtls_mpi_write_binary(&hr, p->sig, mbedtls_mpi_size(&hr));
+	mbedtls_mpi_write_binary(&hs, p->sig+mbedtls_mpi_size(&hr), mbedtls_mpi_size(&hs));
+	printf("HR: %d HS: %d\n", mbedtls_mpi_size(&hr), mbedtls_mpi_size(&hs));
 
 	//Send
 	memcpy(p->data, packet, len);

@@ -17,5 +17,5 @@ BlkIdCacheHandle *idcacheCreate(int size, BlockdevifHandle *blkdev, BlockdevIf *
 void idcacheSet(BlkIdCacheHandle *h, int block, uint32_t id);
 uint32_t idcacheGet(BlkIdCacheHandle *h, int block);
 void idcacheFlushToStorage(BlkIdCacheHandle *h);
-
+void idcacheSetSectorData(BlkIdCacheHandle *h, int block, uint8_t *data, uint32_t id);
 #endif

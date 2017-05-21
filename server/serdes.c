@@ -54,8 +54,10 @@ void serdesSend(uint8_t *packet, size_t len) {
 	h.magic=htonl(SERDES_MAGIC);
 	h.len=htons(len);
 	h.crc16=0;
-	crc=crc16_block(0, (uint8_t*)&h, sizeof(SerdesHdr));
-	h.crc16=htons(crc16_block(crc, packet, len));
+//	crc=crc16_block(0, (uint8_t*)&h, sizeof(SerdesHdr));
+//	h.crc16=htons(crc16_block(crc, packet, len));
+	crc=crc16_ccitt(0, (uint8_t*)&h, sizeof(SerdesHdr));
+	h.crc16=htons(crc16_ccitt(crc, packet, len));
 	appendToBuf((uint8_t*)&h, sizeof(SerdesHdr));
 	appendToBuf(packet, len);
 //	printf("Serdes: buf %d/%d\n", serdesPos, sendMaxPktLen);

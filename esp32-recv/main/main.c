@@ -21,6 +21,12 @@
 #include "bd_flatflash.h"
 #include "hkpackets.h"
 
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
+#include "nvs.h"
+#include "powerdown.h"
+
+#include "freertos/ringbuf.h"
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -99,6 +105,7 @@ void printip(uint32_t ip) {
 	printf("%d.%d.%d.%d", p[0], p[1], p[2], p[3]);
 }
 
+RingbufHandle_t *packetRingbuf;
 
 void sniffcb(void *buf, wifi_promiscuous_pkt_type_t type) {
 //	printf("Sniffed: type %d\n", type);
@@ -148,22 +155,59 @@ void sniffcb(void *buf, wifi_promiscuous_pkt_type_t type) {
 		UdpHdr *uh=(UdpHdr*)&iph->payload[(ip_ihl-5)*4];
 		if (ntohs(uh->len) < len-4) return; //-4 because WiFi packets have 4-byte CRC appended
 		int udppllen=ntohs(uh->len)-sizeof(UdpHdr);
-		printf("Rem len %d udp len %d ", len-4, ntohs(uh->len));
-		printf("Packet ");
-		printip(iph->src);
-		printf(":%d -> ", ntohs(uh->srcPort));
-		printip(iph->dst);
-		printf(":%d\n", ntohs(uh->dstPort));
+//		printf("Rem len %d udp len %d ", len-4, ntohs(uh->len));
+//		printf("Packet ");
+//		printip(iph->src);
+//		printf(":%d -> ", ntohs(uh->srcPort));
+//		printip(iph->dst);
+//		printf(":%d\n", ntohs(uh->dstPort));
 
-		if (ntohs(uh->dstPort)==2017) {
-//			hexdump(uh->payload, udppllen);
-			chksignRecv(uh->payload, udppllen);
-			printf("Parsed.\n");
-		}
+		if (ntohs(uh->dstPort)!=2017) return;
+		
+		xRingbufferSend(packetRingbuf, uh->payload, udppllen, 0);
 	}
 }
 
-int simDeepSleepMs; //HACK!
+
+BlockDecodeHandle *otablockdecoder;
+
+
+void parseTask(void *arg) {
+	int t=0;
+	printf("ParseTask started.");
+	while(1) {
+		size_t len;
+		uint8_t *p=xRingbufferReceive(packetRingbuf, &len, portMAX_DELAY);
+		chksignRecv(p, len);
+		vRingbufferReturnItem(packetRingbuf, p);
+//		printf("Parsed.\n");
+		t++;
+		if ((t&63)==0) blockdecodeStatus(otablockdecoder);
+	}
+}
+
+
+
+void flashDone(uint32_t changeId, void *arg) {
+	esp_partition_t *otapart=(esp_partition_t*)arg;
+	printf("Flash done!\n");
+	esp_err_t r=esp_ota_set_boot_partition(otapart);
+	if (r!=ESP_OK) {
+		printf("Huh? esp_ota_set_boot_partition failed.\n");
+	} else {
+		esp_restart();
+	}
+}
+
+void doDeepSleep(int delayMs, void *arg) {
+	delayMs-=3000; //to compensate for startup delay
+	if (delayMs<5000) return; //not worth sleeping
+	printf("Sleeping for %d ms...\n", delayMs);
+	blockdecodeShutDown(otablockdecoder);
+	esp_deep_sleep_enable_timer_wakeup(delayMs*1000);
+	esp_deep_sleep_start();
+}
+
 
 void app_main(void)
 {
@@ -175,29 +219,49 @@ void app_main(void)
     ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
 //    ESP_ERROR_CHECK( esp_wifi_start() );
 
+	powerDownMgrInit(doDeepSleep, NULL);
+
+	printf("********************\n");
+	printf("* V 5              *\n");
+	printf("********************\n");
+
+
 	chksignInit(defecRecv);
 	defecInit(serdecRecv, 1400);
 	serdecInit(hldemuxRecv);
 	
-//	blockdecodeInit(1, 8*1024*1024, &blockdefIfBdemu, "tst/blockdev");
-#if 0
+	//Grab last OTA firmware change ID so we don't redundantly update the OTA region
+	nvs_handle nvsh=NULL;
+	nvs_open("bpp", NVS_READWRITE, &nvsh);
+	uint32_t chgid=0;
+	nvs_get_u32(nvsh, "lastotaid", &chgid);
+	nvs_close(nvsh);
+
+	//Figure out which OTA partition we're *not* running from, pass that to the blockdev.
+	const esp_partition_t *otapart=esp_ota_get_next_update_partition(NULL);
+	
+
 	BlockdefIfFlatFlashDesc bdesc={
-		.major=0x12,
-		.minor=0x34,
+		.major=otapart->type,
+		.minor=otapart->subtype,
 		.doneCb=flashDone,
-		.doneCbArg=NULL,
-		.minChangeId=1494667311
+		.doneCbArg=(void*)otapart,
+		.minChangeId=chgid
 	};
-	blockdecodeInit(1, 8*1024*1024, &blockdefIfFlatFlash, &bdesc);
-#endif
+	int otasize=otapart->size-4096;
+	otablockdecoder=blockdecodeInit(1, otasize, &blockdefIfFlatFlash, &bdesc);
+	printf("Initialized ota blockdev listener; maj=%x min=%x size=%d\n", bdesc.major, bdesc.minor, otasize);
+
 	subtitleInit();
 	hkpacketsInit();
 
+	packetRingbuf=xRingbufferCreate(32*1024, RINGBUF_TYPE_NOSPLIT);
 
-
+	printf("Starting promisc mode\n");
 	ESP_ERROR_CHECK(esp_wifi_set_promiscuous_rx_cb(sniffcb));
 	ESP_ERROR_CHECK(esp_wifi_set_promiscuous(1));
 	ESP_ERROR_CHECK(esp_wifi_set_channel(11,WIFI_SECOND_CHAN_NONE));
-
+	
+	xTaskCreatePinnedToCore(parseTask, "parse", 8192, NULL, 3, NULL, 1);
 }
 

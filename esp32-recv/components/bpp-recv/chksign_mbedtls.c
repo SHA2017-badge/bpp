@@ -25,8 +25,9 @@ static RecvCb *recvCb;
 static mbedtls_ecp_keypair key;
 
 
-#define ECPARAMS MBEDTLS_ECP_DP_SECP256R1
-
+//#define ECPARAMS MBEDTLS_ECP_DP_SECP256R1
+//#define ECPARAMS MBEDTLS_ECP_DP_CURVE25519
+#define ECPARAMS MBEDTLS_ECP_DP_SECP192R1
 
 void chksignInit(RecvCb *cb) {
 	int r;
@@ -39,8 +40,8 @@ void chksignInit(RecvCb *cb) {
 	if (r) printf("group load failed\n");
 	r=mbedtls_mpi_read_binary(&key.Q.X, (unsigned char*)&public_key[0], 32);
 	if (r) printf("read_binary X failed\n");
-	r=mbedtls_mpi_read_binary(&key.Q.Y, (unsigned char*)&public_key[32], 32);
-	if (r) printf("read_binary Y failed\n");
+//	r=mbedtls_mpi_read_binary(&key.Q.Y, (unsigned char*)&public_key[32], 32);
+//	if (r) printf("read_binary Y failed\n");
 	r=mbedtls_mpi_read_binary(&key.Q.Z, (unsigned char*)"\001", 1);
 	if (r) printf("read_binary Z failed\n");
 }

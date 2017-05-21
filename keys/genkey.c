@@ -11,6 +11,8 @@
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 
+#include "ed25519.h"
+
 mbedtls_entropy_context entropy;
 
 
@@ -36,8 +38,11 @@ void output_c_code(char *fname, char *varname, uint8_t *data, int size) {
 	printf("Written %s: var %s has %d bytes.\n", fname, varname, size);
 }
 
-#define ECPARAMS MBEDTLS_ECP_DP_SECP256R1
-//#define ECPARAMS MBEDTLS_ECP_DP_CURVE25519
+
+
+#ifdef USE_MBEDTLS
+//#define ECPARAMS MBEDTLS_ECP_DP_SECP256R1
+#define ECPARAMS MBEDTLS_ECP_DP_CURVE25519
 
 int main(int argc, char **argv) {
 	mbedtls_ecp_keypair key;
@@ -82,3 +87,16 @@ int main(int argc, char **argv) {
 	exit(0);
 }
 
+#endif
+
+#define USE_ED25519
+
+#ifdef USE_ED25519
+int main(int argc, char **argv) {
+	unsigned char seed[32], pubkey[32], privkey[64];
+	ed25519_create_seed(seed);
+	ed25519_create_keypair(pubkey, privkey, seed);
+	output_c_code("privkey.inc", "private_key", privkey, 64);
+	output_c_code("pubkey.inc", "public_key", pubkey, 32);
+}
+#endif
