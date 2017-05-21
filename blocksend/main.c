@@ -9,6 +9,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <arpa/inet.h>
+#include "ini.h"
 #include "structs.h"
 
 #include "bppsource.h"
@@ -85,15 +86,22 @@ implement a special mode for that.
 #define POSTFIX_TIMESTAMP ".timestamp"
 #define POSTFIX_TIMESTAMP_TMP ".timestamp_tmp"
 
-char *blockfile, *prefix;
+typedef struct {
+	char *file;
+	int streamid;
+	int size;
+	char* stateprefix;
+	int packetspermin;
+	int pctoldpackets;
+} Config;
+
+Config myConfig;
 
 size_t fileSize;
 uint8_t *fileContents;
 uint32_t *fileTimestamps;
 int bppCon;
 
-int cfgPacketsPerMin;
-int cfgPctOldPackets;
 
 
 //Read in block file, see which blocks have changed and update the timestamp data
@@ -104,11 +112,17 @@ int cfgPctOldPackets;
 uint32_t updateTimestamps() {
 	char *newBuf=malloc(fileSize);
 	time_t tstamp=time(NULL);
-	int f=open(blockfile, O_RDONLY);
+	int f=open(myConfig.file, O_RDONLY);
 	if (f<=0) {
 		perror("reading block file");
 		exit(1);
 	}
+	fileSize=lseek(f, 0, SEEK_END);
+	if (fileSize>myConfig.size) {
+		printf("ERROR: File size bigger than size configured! Truncating.\n");
+		fileSize=myConfig.size;
+	}
+	lseek(f, 0, SEEK_SET);
 	int r=read(f, newBuf, fileSize);
 	if (r!=fileSize) {
 		perror("blockfile: Incomplete read");
@@ -117,8 +131,8 @@ uint32_t updateTimestamps() {
 	close(f);
 	//Copy data over to lastprocessed_tmp file, so we know what data the timestamp
 	//file corresponds to.
-	char *fnbuf=malloc(strlen(prefix)+32);
-	sprintf(fnbuf, "%s%s", prefix, POSTFIX_LASTPROCESSED_TMP);
+	char *fnbuf=malloc(strlen(myConfig.stateprefix)+32);
+	sprintf(fnbuf, "%s%s", myConfig.stateprefix, POSTFIX_LASTPROCESSED_TMP);
 	f=open(fnbuf, O_WRONLY|O_CREAT|O_TRUNC, 0644);
 	if (f<=0) {
 		printf("%s: ", fnbuf);
@@ -151,7 +165,7 @@ uint32_t updateTimestamps() {
 	}
 
 	//Write timestamps to temp timestamp file
-	sprintf(fnbuf, "%s%s", prefix, POSTFIX_TIMESTAMP_TMP);
+	sprintf(fnbuf, "%s%s", myConfig.stateprefix, POSTFIX_TIMESTAMP_TMP);
 	f=open(fnbuf, O_WRONLY|O_CREAT|O_TRUNC, 0644);
 	if (f<=0) {
 		printf("%s: ", fnbuf);
@@ -171,16 +185,16 @@ uint32_t updateTimestamps() {
 	fileContents=newBuf;
 
 	//Atomically swap tmpfiles over old tmpfiles
-	char *fnbuf2=malloc(strlen(prefix)+32);
-	sprintf(fnbuf, "%s%s", prefix, POSTFIX_TIMESTAMP_TMP);
-	sprintf(fnbuf2, "%s%s", prefix, POSTFIX_TIMESTAMP);
+	char *fnbuf2=malloc(strlen(myConfig.stateprefix)+32);
+	sprintf(fnbuf, "%s%s", myConfig.stateprefix, POSTFIX_TIMESTAMP_TMP);
+	sprintf(fnbuf2, "%s%s", myConfig.stateprefix, POSTFIX_TIMESTAMP);
 	if (rename(fnbuf, fnbuf2)!=0) {
 		printf("Renaming %s to %s:\n", fnbuf, fnbuf2);
 		perror("error");
 		exit(1);
 	}
-	sprintf(fnbuf, "%s%s", prefix, POSTFIX_LASTPROCESSED_TMP);
-	sprintf(fnbuf2, "%s%s", prefix, POSTFIX_LASTPROCESSED);
+	sprintf(fnbuf, "%s%s", myConfig.stateprefix, POSTFIX_LASTPROCESSED_TMP);
+	sprintf(fnbuf2, "%s%s", myConfig.stateprefix, POSTFIX_LASTPROCESSED);
 	if (rename(fnbuf, fnbuf2)!=0) {
 		printf("Renaming %s to %s:\n", fnbuf, fnbuf2);
 		perror("error");
@@ -204,9 +218,12 @@ void sendBitmapFor(uint32_t ts, uint32_t nowts) {
 	memset(p, 0, sizeof(BDPacketBitmap)+bitmapBytes);
 	p->changeIdOrig=htonl(ts);
 	p->changeIdNew=htonl(nowts);
-	for (int i=0; i<(fileSize/BLOCKSIZE); i++) {
+	int i;
+	for (i=0; i<(fileSize/BLOCKSIZE); i++) {
 		if (fileTimestamps[i]<ts) p->bitmap[i/8]|=(1<<(i&7));
 	}
+	//Fill last bits of byte with FF
+	if ((i&7)!=0) p->bitmap[i/8]|=(0xff<<(i&7));
 	int r=bppSend(bppCon, BDSYNC_SUBTYPE_BITMAP, (uint8_t*)p, sizeof(BDPacketBitmap)+bitmapBytes);
 	if (!r) {
 		printf("Error sending bitmap packet!\n");
@@ -302,8 +319,8 @@ void mainLoop() {
 		//Decide how many new and old packets we can send out.
 		int remainingMs;
 		bppQuery(bppCon, 'e', &remainingMs);
-		int pktCount=(cfgPacketsPerMin*remainingMs)/60000;
-		int oldPktCount=(cfgPctOldPackets*pktCount)/100;
+		int pktCount=(myConfig.packetspermin*remainingMs)/60000;
+		int oldPktCount=(myConfig.pctoldpackets*pktCount)/100;
 		int newPktCount=pktCount-oldPktCount;
 
 		printf("Send oldermarker\n");
@@ -312,7 +329,7 @@ void mainLoop() {
 		if (lastPacketPos>=(fileSize/BLOCKSIZE)) lastPacketPos-=(fileSize/BLOCKSIZE); //wraparound
 		sendOlderMarker(sortedTs[(newPktCount)].ts, 
 				oldPacketPos, lastPacketPos, 
-				(remainingMs*(100-cfgPctOldPackets))/100);
+				(remainingMs*(100-myConfig.pctoldpackets))/100);
 
 		int packet;
 		//Send new packets first.
@@ -332,62 +349,96 @@ void mainLoop() {
 	}
 }
 
+int iniHandler(void* user, const char* section, const char* name, const char* value) {
+	Config *cfg=(Config*)user;
+	if (strcmp(name, "file")==0) {
+		free(cfg->file);
+		cfg->file=strdup(value);
+		if (cfg->stateprefix==NULL) cfg->stateprefix=strdup(value);
+	} else if (strcmp(name, "stateprefix")==0) {
+		free(cfg->stateprefix);
+		cfg->stateprefix=strdup(value);
+	} else if (strcmp(name, "streamid")==0) {
+		cfg->streamid=strtol(value, NULL, 0);
+	} else if (strcmp(name, "size")==0) {
+		cfg->size=strtol(value, NULL, 0);
+	} else if (strcmp(name, "packetspermin")==0) {
+		cfg->packetspermin=strtol(value, NULL, 0);
+	} else if (strcmp(name, "pctoldpackets")==0) {
+		cfg->pctoldpackets=strtol(value, NULL, 0);
+	} else {
+		printf("Unable to parse key \"%s\".", name);
+	}
+}
+
+
 int main(int argc, char **argv) {
 	char *fnbuf;
 	int r;
 	if (argc<2) {
-		printf("Usage: %s blockfile [stateprefix [packets-per-min [pct-oldpackets]]]\n", argv[0]);
+		printf("Usage: %s config.ini\n", argv[0]);
 		exit(0);
 	}
-	blockfile=argv[1];
 
-	cfgPacketsPerMin=60;
-	cfgPctOldPackets=30;
-	if (argc>=3) cfgPacketsPerMin=atoi(argv[2]);
-	if (argc>=4) cfgPacketsPerMin=atoi(argv[3]);
+	myConfig.file=NULL;
+	myConfig.streamid=-1;
+	myConfig.size=0;
+	myConfig.stateprefix=NULL;
+	myConfig.packetspermin=60;
+	myConfig.pctoldpackets=30;
+	r=ini_parse(argv[1], iniHandler, (void*)&myConfig);
+	if (r!=0) {
+		printf("Couldn't parse %s: line %d\n", argv[1], r);
+		exit(1);
+	}
 
-	prefix=(argc>2)?argv[2]:argv[1];
-	fnbuf=malloc(strlen(prefix)+32);
+	fnbuf=malloc(strlen(myConfig.stateprefix)+32);
 
-	bppCon=bppCreateConnection("localhost", HLPACKET_TYPE_BDSYNC);
+	bppCon=bppCreateConnection("localhost", myConfig.streamid);
 	if (bppCon<=0) {
 		perror("connecting to bppserver");
 		exit(1);
 	}
 
 	//Open last-processed blockfile state
-	sprintf(fnbuf, "%s%s", prefix, POSTFIX_LASTPROCESSED);
+	sprintf(fnbuf, "%s%s", myConfig.stateprefix, POSTFIX_LASTPROCESSED);
 	int f=open(fnbuf, O_RDONLY);
 	if (f<=0) {
 		//No (valid) lastprocessed file. Use main file.
 		printf("No valid lastprocessed file found. Using main file as starting point.\n");
-		f=open(blockfile, O_RDONLY);
+		f=open(myConfig.file, O_RDONLY);
 		if (f<=0) {
-			perror(blockfile);
+			perror(myConfig.file);
 			exit(1);
 		}
 	}
 	//Allocate buffers and read in file
+	if (fileSize>myConfig.size) {
+		printf("ERROR: File size bigger than size configured! Truncating.\n");
+		fileSize=myConfig.size;
+	}
 	fileSize=lseek(f, 0, SEEK_END);
 	lseek(f, 0, SEEK_SET);
 	fileContents=malloc(fileSize);
-	fileTimestamps=malloc(sizeof(uint32_t)*(fileSize/BLOCKSIZE));
+	fileTimestamps=malloc(sizeof(uint32_t)*(myConfig.size/BLOCKSIZE));
 	r=read(f, fileContents, fileSize);
 	if (r!=fileSize) {
 		printf("Eek! Couldn't load in entire lastprocessed file.\n");
 		exit(1);
 	}
 	close(f);
+
+	//Pre-set timestamps to current time, for partial reads.
+	for (int i=0; i<(myConfig.size/BLOCKSIZE); i++) {
+		fileTimestamps[i]=time(NULL);
+	}
 	//Read in old timestamps
-	sprintf(fnbuf, "%s%s", prefix, POSTFIX_TIMESTAMP);
+	sprintf(fnbuf, "%s%s", myConfig.stateprefix, POSTFIX_TIMESTAMP);
 	f=open(fnbuf, O_RDONLY);
 	if (f<=0) {
 		printf("Can't read blocktimestamp file; seting timestamps to current time.\n");
-		for (int i=0; i<(fileSize/BLOCKSIZE); i++) {
-			fileTimestamps[i]=time(NULL);
-		}
 	} else {
-		read(f, fileTimestamps, sizeof(uint32_t)*(fileSize/BLOCKSIZE));
+		read(f, fileTimestamps, sizeof(uint32_t)*(myConfig.size/BLOCKSIZE));
 		close(f);
 	}
 	free(fnbuf);

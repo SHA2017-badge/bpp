@@ -1,4 +1,4 @@
-OBJS:=main.o
+OBJS:=main.o ini.o
 CFLAGS:=-ggdb -I../bppsource -I../common
 LDFLAGS:=-L../bppsource -lbppsource
 
