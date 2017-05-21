@@ -195,6 +195,7 @@ void flashDone(uint32_t changeId, void *arg) {
 	if (r!=ESP_OK) {
 		printf("Huh? esp_ota_set_boot_partition failed.\n");
 	} else {
+		blockdecodeShutDown(otablockdecoder);
 		esp_restart();
 	}
 }
@@ -222,7 +223,7 @@ void app_main(void)
 	powerDownMgrInit(doDeepSleep, NULL);
 
 	printf("********************\n");
-	printf("* V 5              *\n");
+	printf("* V 9              *\n");
 	printf("********************\n");
 
 

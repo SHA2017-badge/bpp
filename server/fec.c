@@ -26,7 +26,7 @@ static uint8_t *parPacket;
 
 static time_t tsLastSaved;
 
-#define TSFILE "timestamp.txt"
+#define TSFILE "lastfecid.txt"
 
 void fecInit(SendCb *cb, int maxlen) {
 	sendCb=cb;
@@ -69,7 +69,7 @@ void fecSend(uint8_t *packet, size_t len) {
 	if (time(NULL)-tsLastSaved > 10) {
 		FILE *f;
 		f=fopen(TSFILE".tmp", "w");
-		fprintf(f, "%d", (int)tsLastSaved);
+		fprintf(f, "%d", (int)serial);
 		fclose(f);
 		rename(TSFILE".tmp", TSFILE);
 		tsLastSaved=time(NULL);

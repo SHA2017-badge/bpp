@@ -1,9 +1,0 @@
-Update proto abstract: https://pad.ijhack.nl/p/shabadge-update-proto
-
-
-Better curves:
-ECDSA 25519
-NTRU
-
-
-RSA is fast(er) to verify (than DSA)

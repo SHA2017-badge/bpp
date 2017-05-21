@@ -19,6 +19,7 @@ it only saves the last change id and the bitmap of sectors that have that ID.
 #include "structs.h"
 #include "blockdevif.h"
 #include "bd_flatflash.h"
+#include "esp_system.h"
 
 typedef struct {
 	uint32_t changeId; //current most recent changeid
@@ -126,9 +127,13 @@ int blockdevifGetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff)
 
 int blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t changeId) {
 	if (sector>=handle->size) printf("Huh? Trying to write sector %d\n", sector);
+	uint32_t start=system_get_time();
 	esp_partition_erase_range(handle->part, sector*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);
+	uint32_t durer=system_get_time()-start;
 	esp_partition_write(handle->part, sector*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
 	blockdevifSetChangeID(handle, sector, changeId);
+	uint32_t dur=system_get_time()-start;
+	printf("Block write: took %d msec, of which %d spent on erasing\n", dur/1000, durer/1000);
 	return 1;
 }
 

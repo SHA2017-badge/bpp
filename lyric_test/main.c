@@ -24,6 +24,6 @@ int main(int argc, char **argv) {
 		buff[strlen(buff)-1]=0; //kill newline
 		bppSend(con, subtype, buff, strlen(buff));
 		printf("%s\n", buff);
-		usleep(100000);
+		usleep(1000000);
 	}
 }

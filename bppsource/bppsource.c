@@ -29,6 +29,15 @@ int bppQuery(int sockfd, int cmd, int *ret) {
 	return bppGetResponse(sockfd, ret);
 }
 
+int bppSet(int sockfd, int cmd, int val) {
+	int ret;
+	char buf[20];
+	sprintf(buf, "%c %d\n", cmd, val);
+	int i=write(sockfd, buf, strlen(buf));
+	if (i<=0) return 0;
+	return bppGetResponse(sockfd, &ret);
+}
+
 int bppSend(int sockfd, int subtype, uint8_t *data, int len) {
 	char buf[len*2+8];
 	int i;

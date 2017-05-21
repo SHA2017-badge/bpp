@@ -28,6 +28,7 @@ struct TcpClient {
 	char buffer[MAX_LINE_LEN];
 	int pos;
 	int waitingForNextCycle;
+	int delayAfterNextPacket;
 	TcpClient *next;
 };
 
@@ -128,6 +129,10 @@ static void parseLine(char *buff, TcpClient *cl) {
 			}
 		}
 		printf("Subtype %d, %d bytes\n", subtype, p/2);
+		if (cl->delayAfterNextPacket) {
+			serdesWaitAfterSendingNext(cl->delayAfterNextPacket);
+			cl->delayAfterNextPacket=0;
+		}
 		hlmuxSend(cl->type, subtype, buff, p/2);
 		sendResp(cl, 1);
 	} else if (buff[0]=='w') {//wait for next cycle
@@ -143,6 +148,14 @@ static void parseLine(char *buff, TcpClient *cl) {
 			sendResp(cl, 0);
 		} else {
 			cycleLenMs=i;
+			sendResp(cl, 1);
+		}
+	} else if (buff[0]=='W') { //Set delay after next packet
+		int i=strtol(&buff[1], NULL, 0);
+		if (i>1500) {
+			sendResp(cl, 0);
+		} else {
+			cl->delayAfterNextPacket=i;
 			sendResp(cl, 1);
 		}
 	} else {

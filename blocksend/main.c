@@ -93,6 +93,7 @@ typedef struct {
 	char* stateprefix;
 	int packetspermin;
 	int pctoldpackets;
+	int blockflashtimems;
 } Config;
 
 Config myConfig;
@@ -244,6 +245,7 @@ void sendChange(int i, uint32_t changeId) {
 	memcpy(p->data, &fileContents[i*BLOCKSIZE], BLOCKSIZE);
 	p->changeId=htonl(changeId);
 	p->sector=htons(i);
+	bppSet(bppCon, 'W', myConfig.blockflashtimems);
 	int r=bppSend(bppCon, BDSYNC_SUBTYPE_CHANGE, (uint8_t*)p, sizeof(BDPacketChange)+BLOCKSIZE);
 	if (!r) {
 		printf("Error sending bitmap packet!\n");
@@ -352,7 +354,7 @@ void mainLoop() {
 			if (oldPacketPos>=(noBlocks())) oldPacketPos=0;
 		}
 		bppQuery(bppCon, 'e', &remainingMs);
-		usleep(remainingMs*1000+500000);
+		if (remainingMs<3000) usleep(remainingMs*1000);
 	}
 }
 
@@ -373,6 +375,8 @@ int iniHandler(void* user, const char* section, const char* name, const char* va
 		cfg->packetspermin=strtol(value, NULL, 0);
 	} else if (strcmp(name, "pctoldpackets")==0) {
 		cfg->pctoldpackets=strtol(value, NULL, 0);
+	} else if (strcmp(name, "blockflashtimems")==0) {
+		cfg->blockflashtimems=strtol(value, NULL, 0);
 	} else {
 		printf("Unable to parse key \"%s\".", name);
 	}
@@ -392,6 +396,7 @@ int main(int argc, char **argv) {
 	myConfig.size=0;
 	myConfig.stateprefix=NULL;
 	myConfig.packetspermin=60;
+	myConfig.blockflashtimems=300;
 	myConfig.pctoldpackets=30;
 	r=ini_parse(argv[1], iniHandler, (void*)&myConfig);
 	if (r!=0) {

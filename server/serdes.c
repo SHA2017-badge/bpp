@@ -31,6 +31,16 @@ void serdesInit(SendCb *cb, int maxlen) {
 }
 
 
+
+//Somewhat evil hack to stop transmitting when the badges are likely to be out to lunch because writing flash
+static int waitTimeMs=0;
+static int waitTimeThisBufMs=0;
+
+int serdesWaitAfterSendingNext(int delayMs) {
+	waitTimeMs=delayMs;
+}
+
+
 static void appendToBuf(uint8_t *data, int len) {
 	while (len >= sendMaxPktLen-serdesPos) { //while packet does not fit in buffer
 		int alen=sendMaxPktLen-serdesPos; //room left in buffer
@@ -42,6 +52,11 @@ static void appendToBuf(uint8_t *data, int len) {
 		//Send and clear buffer
 		sendCb(serdesBuf, sendMaxPktLen);
 		serdesPos=0;
+		if (waitTimeThisBufMs) {
+			printf("Sleeping %d ms to allow flash writes...\n", waitTimeThisBufMs);
+			usleep(waitTimeThisBufMs*1000);
+		}
+		waitTimeThisBufMs=0;
 	}
 	//(rest of) packet is guaranteed to fit in remaining buffer space
 	memcpy(serdesBuf+serdesPos, data, len);
@@ -59,7 +74,11 @@ void serdesSend(uint8_t *packet, size_t len) {
 	crc=crc16_ccitt(0, (uint8_t*)&h, sizeof(SerdesHdr));
 	h.crc16=htons(crc16_ccitt(crc, packet, len));
 	appendToBuf((uint8_t*)&h, sizeof(SerdesHdr));
-	appendToBuf(packet, len);
+	//Send entire contents, but trigger wait time after sending last byte to lower layer.
+	appendToBuf(packet, len-1);
+	waitTimeThisBufMs=waitTimeMs;
+	waitTimeMs=0;
+	appendToBuf(&packet[len-1], 1);
 //	printf("Serdes: buf %d/%d\n", serdesPos, sendMaxPktLen);
 }
 
