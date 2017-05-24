@@ -5,6 +5,6 @@
 
 
 void chksignInit(RecvCb *cb);
-void chksignRecv(uint8_t *packet, size_t len);
+int chksignRecv(uint8_t *packet, size_t len);
 
 #endif

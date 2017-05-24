@@ -21,7 +21,7 @@ struct BlockDecodeHandle{
 	BlockdevIf *bdif;
 	BlkIdCacheHandle *idcache;
 	int noBlocks;
-	int currentChangeID;
+	uint32_t currentChangeID;
 };
 
 
@@ -44,6 +44,7 @@ void blockdecodeStatus(BlockDecodeHandle *d) {
 
 
 void blockdecodeShutDown(BlockDecodeHandle *d) {
+	if (d->currentChangeID==0) return;
 	idcacheFlushToStorage(d->idcache);
 }
 
@@ -131,7 +132,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 	} else if (subtype==BDSYNC_SUBTYPE_CHANGE) {
 		//If no bitmap has come in, don't handle changes.
 		if (d->currentChangeID==0) {
-			printf("Data ignored; waiting for bitmap first.\n");
+			printf("Data ignored; waiting for bitmap first. Sleeping.\n");
 			powerCanSleep((int)arg);
 			return;
 		}
@@ -181,9 +182,9 @@ BlockDecodeHandle *blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *b
 	d->noBlocks=size/BLOCKDEV_BLKSZ;
 	d->idcache=idcacheCreate(d->noBlocks, d->bdev, bdIf);
 	d->bdif=bdIf;
+	d->currentChangeID=0;
 
 	hldemuxAddType(type, blockdecodeRecv, d);
-	powerHold((int)d);
 
 	return d;
 }

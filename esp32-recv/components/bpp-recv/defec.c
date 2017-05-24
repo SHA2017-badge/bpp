@@ -8,7 +8,7 @@ Try to ressurect missing packets using FEC
 #include <arpa/inet.h>
 #include "recvif.h"
 #include "structs.h"
-
+#include "defec.h"
 
 static RecvCb *recvCb;
 
@@ -19,6 +19,9 @@ static uint32_t parSerial[FEC_M];
 static int lastSentSerial=0; //sent to upper layer, that is
 static int lastRecvSerial=0;
 
+static portMUX_TYPE statusMux = portMUX_INITIALIZER_UNLOCKED;
+static FecStatus status;
+
 void defecInit(RecvCb *cb, int maxLen) {
 	int i;
 	recvCb=cb;
@@ -26,6 +29,13 @@ void defecInit(RecvCb *cb, int maxLen) {
 		parPacket[i]=malloc(maxLen);
 		parSerial[i]=0;
 	}
+	memset(&status, 0, sizeof(status));
+}
+
+void defecGetStatus(FecStatus *st) {
+	portENTER_CRITICAL(&statusMux);
+	memcpy(st, &status, sizeof(status));
+	portEXIT_CRITICAL(&statusMux);
 }
 
 
@@ -36,10 +46,17 @@ void defecRecv(uint8_t *packet, size_t len) {
 
 	int serial=ntohl(p->serial);
 	if (serial<=lastRecvSerial) return; //dup
+
+	if (lastRecvSerial!=0) {
+		portENTER_CRITICAL(&statusMux);
+		status.packetsInTotal+=serial-lastRecvSerial;
+		status.packetsInMissed+=(serial-lastRecvSerial)-1;
+		portEXIT_CRITICAL(&statusMux);
+	}
 	lastRecvSerial=serial;
 
 	int spos=serial%(FEC_M+1);
-	printf("FEC: %d (%d) %s\n", serial, spos, (spos<FEC_M)?"D":"P");
+//	printf("FEC: %d (%d) %s\n", serial, spos, (spos<FEC_M)?"D":"P");
 	if (spos<FEC_M) {
 		//Normal packet.
 		//First, check if we missed a parity packet.

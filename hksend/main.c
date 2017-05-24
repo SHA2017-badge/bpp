@@ -28,9 +28,11 @@ int main(int argc, char **argv) {
 		if (remaining>interval) {
 			usleep(interval*1000);
 		} else {
-			usleep(remaining*1000);
-			printf("Sleeping a while for catalog start...\n");
-			usleep(3000000); //Give logic a bit to send out packet markers
+			if (remaining>0) {
+				usleep(remaining*1000);
+				printf("Sleeping a while for catalog start...\n");
+				usleep(3000000); //Give logic a bit to send out packet markers
+			}
 		}
 	}
 }
