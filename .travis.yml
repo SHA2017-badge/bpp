@@ -54,7 +54,7 @@ script:
   - make
   - cd ..
   # Compile ESP32 client code
-  source set_env.sh
-  cd esp32-recv
-  make
-  
+  - source set_env.sh
+  - cd esp32-recv
+  - make
+
