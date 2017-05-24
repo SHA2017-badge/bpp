@@ -49,4 +49,53 @@ Misc
 The keys directory contains keys and a program to generate a new private/public keypair used to sign all
 packets of communication.
 
+Compiling
+---------
+
+Debian prequisites:
+
+```
+sudo apt-get install libncurses5-dev flex bison gperf
+```
+
+Compiling libraries
+
+```
+cd ed25519/src
+make
+cd ../..
+cd bppsource
+make
+cd ..
+```
+
+Compiling the server agent and senders
+
+```
+cd blocksend
+make
+cd ..
+cd hksend
+make
+cd ..
+cd lyric_test
+make
+cd ..
+cd keys
+make
+./genkey
+cd ..
+cd server
+make
+cd ..
+```
+
+Compiling and Flashing the ESP32 Client
+
+```
+source set_env.sh
+cd esp32-recv
+make defconfig
+make flash
+```
 
