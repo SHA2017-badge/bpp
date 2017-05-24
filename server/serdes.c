@@ -41,6 +41,7 @@ static int waitTimeThisBufMs=0;
 
 int serdesWaitAfterSendingNext(int delayMs) {
 	waitTimeMs=delayMs;
+	return delayMs;
 }
 
 

@@ -47,7 +47,7 @@ script:
   # Make genkey and generate keys
   - cd keys
   - make
-  - ./genkey || echo $?
+  - ./genkey
   - cd ..
   # Compile the server
   - cd server

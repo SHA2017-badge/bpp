@@ -4,7 +4,6 @@
 #include <string.h>
 #include <assert.h>
 
-#define USE_ED25519
 #include "ed25519.h"
 
 void output_c_code(char *fname, char *varname, uint8_t *data, int size) {
@@ -28,12 +27,11 @@ void output_c_code(char *fname, char *varname, uint8_t *data, int size) {
 	printf("Written %s: var %s has %d bytes.\n", fname, varname, size);
 }
 
-#ifdef USE_ED25519
 int main(int argc, char **argv) {
 	unsigned char seed[32], pubkey[32], privkey[64];
 	ed25519_create_seed(seed);
 	ed25519_create_keypair(pubkey, privkey, seed);
 	output_c_code("privkey.inc", "private_key", privkey, 64);
 	output_c_code("pubkey.inc", "public_key", pubkey, 32);
+	return 0;
 }
-#endif
