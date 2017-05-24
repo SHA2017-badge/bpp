@@ -6,6 +6,9 @@ packets. The idea is that we can do fec, encryption etc over the fixed-length pa
 easier and more effective) but can feed variable-length packets into this (which is more 
 user-friendly and flexible).
 */
+
+#define _XOPEN_SOURCE
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
