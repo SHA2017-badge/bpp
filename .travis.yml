@@ -53,11 +53,8 @@ script:
   - cd server
   - make
   - cd ..
-
-  # TODO compile ESP32 client ;)    
+  # Compile ESP32 client code
+  source set_env.sh
+  cd esp32-recv
+  make
   
-  
-  
-  
-  
-
