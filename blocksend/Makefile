@@ -1,5 +1,5 @@
 OBJS:=main.o ini.o
-CFLAGS:=-ggdb -I../bppsource -I../common
+CFLAGS:=-ggdb -std=gnu99 -I../bppsource -I../common
 LDFLAGS:=-L../bppsource -lbppsource
 
 blocksend: $(OBJS)

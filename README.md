@@ -1,10 +1,12 @@
 What is this?
+=============
 
 This is the bpp update protocol suite hackery thingamajig. It's essentially a protocol encapsulating
 multiple streams, sent over UDP over a WiFi network, so clients can pick it up and decode it without
 having to connect to the network or transmit anything.
 
-*** Server programs (and related) ***
+Server programs (and related)
+-----------------------------
 
 The server
 
@@ -35,13 +37,65 @@ lyric_test
 Simple and stupid server that can send around the contents of a text file, line for line, over and 
 over again.
 
-*** Client programs ***
+Client programs
+---------------
 
 esp32-recv contains an example of the protocol. This app can update itself over the broadcast protocol,
 display lyrics, and use deep_sleep to save power. The actual client code is in components/bpp_recv.
 
-*** Misc ***
+Misc
+----
 
 The keys directory contains keys and a program to generate a new private/public keypair used to sign all
 packets of communication.
+
+Compiling
+---------
+
+Debian prequisites:
+
+```
+sudo apt-get install libncurses5-dev flex bison gperf
+```
+
+Compiling libraries
+
+```
+cd ed25519/src
+make
+cd ../..
+cd bppsource
+make
+cd ..
+```
+
+Compiling the server agent and senders
+
+```
+cd blocksend
+make
+cd ..
+cd hksend
+make
+cd ..
+cd lyric_test
+make
+cd ..
+cd keys
+make
+./genkey
+cd ..
+cd server
+make
+cd ..
+```
+
+Compiling and Flashing the ESP32 Client
+
+```
+source set_env.sh
+cd esp32-recv
+make defconfig
+make flash
+```
 

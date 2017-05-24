@@ -1,0 +1,70 @@
+sudo: false
+language: bash
+os:
+  - linux
+
+addons:
+  apt:
+    packages:
+      - gperf
+      - python
+      - python-serial
+
+before_install:
+  # Save path to the git respository
+  - PROJECT_PATH=$(pwd)
+
+install:
+  # Install ESP32 toochain following steps as desribed
+  # in http://esp-idf.readthedocs.io/en/latest/linux-setup.html
+  #
+  # Get required packages - already done above, see addons: apt: packages:
+  # - sudo apt-get install git wget make libncurses-dev flex bison gperf python python-serial
+  # Prepare directory for the toolchain
+  git submodule update --init --recursive
+
+script:
+  # Compile needed Edwards-curve stuff
+  - cd ed25519/src
+  - make
+  - cd ../..
+  # Compile bppsource library for connecting to the server
+  - cd bppsource
+  - make
+  - cd ..
+  # Compile blocksend app
+  - cd blocksend
+  - make
+  - cd ..
+  # Compile the Housekeeping server
+  - cd hksend
+  - make
+  - cd ..
+  # Compile the demo text server
+  - cd lyric_test
+  - make
+  - cd ..
+  # Make genkey and generate keys
+  - cd keys
+  - make
+  - ./genkey
+  - cd ..
+  # Compile the server
+  - cd server
+  - make
+  - cd ..
+  # Compile ESP32 client code
+  - source set_env.sh
+  - cd esp32-recv
+  - make defconfig
+  - make
+
+notifications:
+  irc:
+    channels:
+      - "chat.freenode.net#sha2017-badge"
+      - "chat.freenode.net#sha2017-badge-dev"
+    on_success: change
+    on_failure: always
+    use_notice: true
+    skip_join: true

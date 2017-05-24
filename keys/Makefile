@@ -1,5 +1,5 @@
 CFLAGS=-I../micro-ecc -ggdb -Wall -I../ed25519/src
-LDFLAGS=-lmbedtls -lmbedcrypto -ggdb ../ed25519/src/libed25519.a
+LDFLAGS=-ggdb ../ed25519/src/libed25519.a
 
 genkey: genkey.o
 	$(CC) -o $@ $^ $(LDFLAGS)
