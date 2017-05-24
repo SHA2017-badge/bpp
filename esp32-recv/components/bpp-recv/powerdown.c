@@ -52,19 +52,22 @@ static void checkCanSleep() {
 			gettimeofday(&now, NULL);
 			int mssleep=(i->sleepUntil.tv_sec-now.tv_sec)*1000;
 			mssleep+=((i->sleepUntil.tv_usec-now.tv_usec)/1000);
-//			printf("Power: Ref %x: can sleep for %d ms\n", i->ref, mssleep);
-			if (canSleepForMs==-1 || mssleep<canSleepForMs) {
-				canSleepForMs=mssleep;
+			if (mssleep<2000) {
+				//Sleep req is too short.
+				//We're going to ignore this sleep request, and make the thing active again.
+//					printf("Power: Ref %x: can sleep for %d ms. Too short, making active again.\n", i->ref, mssleep);
+					i->state=ST_ACTIVE;
+			} else {
+//				printf("Power: Ref %x: can sleep for %d ms\n", i->ref, mssleep);
+				if (canSleepForMs==-1 || mssleep<canSleepForMs) {
+					canSleepForMs=mssleep;
+				}
 			}
 		} else if (i->state==ST_CANSLEEP) {
 //			printf("Power: Ref %x: can sleep.\n", i->ref);
 			//Erm, nothing to check, thing can sleep.
 		}
 		i=i->next;
-	}
-	if (canSleepForMs<2000) {
-		//Ignore. Too short.
-		return;
 	}
 	//If we're here, we can sleep.
 	if (!cannotSleep) doSleep(canSleepForMs);

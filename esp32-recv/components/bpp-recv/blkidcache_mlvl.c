@@ -75,7 +75,7 @@ void idcacheSet(BlkIdCacheHandle *h, int block, uint32_t id) {
 
 void idcacheSetSectorData(BlkIdCacheHandle *h, int block, uint8_t *data, uint32_t id) {
 	idcacheSet(h, block, id);
-	h->bdif->setSectorData(h->blkdev, block, data, id);
+	h->bdif->setSectorData(h->blkdev, block, data);
 }
 
 

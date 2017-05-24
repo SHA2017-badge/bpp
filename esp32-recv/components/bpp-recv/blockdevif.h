@@ -14,7 +14,7 @@ typedef struct {
 	void (*setChangeID)(BlockdevifHandle *handle, int sector, uint32_t changeId);
 	uint32_t (*getChangeID)(BlockdevifHandle *handle, int sector);
 	int (*getSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff);
-	int (*setSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t changeId);
+	int (*setSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff);
 	void (*forEachBlock)(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg);
 } BlockdevIf;
 

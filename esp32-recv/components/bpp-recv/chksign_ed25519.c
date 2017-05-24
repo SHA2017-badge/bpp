@@ -20,7 +20,7 @@ void chksignInit(RecvCb *cb) {
 	recvCb=cb;
 }
 
-void chksignRecv(uint8_t *packet, size_t len) {
+int chksignRecv(uint8_t *packet, size_t len) {
 	if (len<sizeof(SignedPacket)) return;
 	SignedPacket *p=(SignedPacket*)packet;
 	int plLen=len-sizeof(SignedPacket);
@@ -32,4 +32,5 @@ void chksignRecv(uint8_t *packet, size_t len) {
 	} else {
 		printf("Signature check failed.\n");
 	}
+	return isOk;
 }

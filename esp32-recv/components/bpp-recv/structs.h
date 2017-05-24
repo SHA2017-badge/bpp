@@ -108,6 +108,7 @@ typedef struct {
 typedef struct {
 	uint32_t changeId;
 	uint16_t sector;
+	uint16_t unused;
 	uint8_t data[];
 } __attribute__ ((packed)) BDPacketChange;
 

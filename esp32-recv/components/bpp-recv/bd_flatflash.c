@@ -43,6 +43,7 @@ static void setNewChangeId(BlockdevifHandle *handle, uint32_t changeId) {
 }
 
 static void flushMgmtSector(BlockdevifHandle *handle) {
+	printf("bd_flatflash: writing mgmt sector\n");
 	esp_partition_write(handle->part, handle->size*BLOCKDEV_BLKSZ, handle->msec, sizeof(FlashMgmtSector)+(handle->size/8));
 }
 
@@ -97,7 +98,8 @@ void blockdevifSetChangeID(BlockdevifHandle *handle, int sector, uint32_t change
 		//Sector indeed is updated now. Clear bit
 		handle->msec->bitmap[sector/8] &= ~(1<<(sector&7));
 		flushMgmtSector(handle);
-		
+
+		//ToDo: Is a done callback here really the place to do it?
 		if (handle->doneCb) {
 			//Check if we're done; call callback if so.
 			int allDone=1;
@@ -125,15 +127,19 @@ int blockdevifGetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff)
 	return (r==ESP_OK);
 }
 
-int blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t changeId) {
+int blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff) {
 	if (sector>=handle->size) printf("Huh? Trying to write sector %d\n", sector);
+
+	printf("Writing %p to block %d of size %d...\n", buff, sector, BLOCKDEV_BLKSZ);
+
 	uint32_t start=system_get_time();
 	esp_partition_erase_range(handle->part, sector*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);
 	uint32_t durer=system_get_time()-start;
+	start=system_get_time();
 	esp_partition_write(handle->part, sector*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
-	blockdevifSetChangeID(handle, sector, changeId);
 	uint32_t dur=system_get_time()-start;
-	printf("Block write: took %d msec, of which %d spent on erasing\n", dur/1000, durer/1000);
+
+	printf("Block write: took %d msec writing %d erasing\n", dur/1000, durer/1000);
 	return 1;
 }
 
