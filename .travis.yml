@@ -32,6 +32,11 @@ script:
   - cd bppsource
   - make
   - cd ..
+  # Make genkey and generate keys
+  - cd keys
+  - make
+  - ./genkey
+  - cd ..
   # Compile blocksend app
   - cd blocksend
   - make
@@ -43,11 +48,6 @@ script:
   # Compile the demo text server
   - cd lyric_test
   - make
-  - cd ..
-  # Make genkey and generate keys
-  - cd keys
-  - make
-  - ./genkey
   - cd ..
   # Compile the server
   - cd server
