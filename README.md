@@ -52,7 +52,7 @@ packets of communication.
 Compiling
 ---------
 
-Debian prequisites:
+Debian prequisites
 
 ```
 sudo apt-get install libncurses5-dev flex bison gperf
@@ -69,6 +69,15 @@ make
 cd ..
 ```
 
+Compiling genkey and generating public and private key
+
+```
+cd keys
+make
+./genkey
+cd ..
+```
+
 Compiling the server agent and senders
 
 ```
@@ -80,10 +89,6 @@ make
 cd ..
 cd lyric_test
 make
-cd ..
-cd keys
-make
-./genkey
 cd ..
 cd server
 make
