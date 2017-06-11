@@ -12,3 +12,4 @@ lyric_test/never.txt
 recv/tst
 hksend/hkserver
 server/lastfecid.txt
+esp32-recv/sdkconfig

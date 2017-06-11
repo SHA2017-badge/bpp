@@ -101,6 +101,8 @@ Compiling and Flashing the ESP32 Client
 source set_env.sh
 cd esp32-recv
 make defconfig
+make menuconfig
+# under 'Partition Table', select 'Factory app, two OTA definitions'
 make flash
 ```
 

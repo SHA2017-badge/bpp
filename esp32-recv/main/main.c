@@ -94,6 +94,11 @@ void app_main(void)
 
 	//Figure out which OTA partition we're *not* running from, pass that to the blockdev.
 	const esp_partition_t *otapart=esp_ota_get_next_update_partition(NULL);
+
+	if (otapart == NULL) {
+		fprintf(stderr, "No OTA partition found, this is required for BPP\n");
+		exit(-1);
+	}
 	
 	BlockdefIfFlatFlashDesc bdesc={
 		.major=otapart->type,
