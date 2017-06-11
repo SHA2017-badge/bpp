@@ -4,7 +4,7 @@ libraries: ed25519 bpp
 
 servers: blocksend hksend lyric_test server
 
-.PHONY: ed25519 bpp keys blocksend hksend lyric_test server
+.PHONY: ed25519 bpp keys blocksend hksend lyric_test server clean
 
 ed25519:
 	make -C ed25519/src
@@ -27,3 +27,11 @@ lyric_test:
 
 server:
 	make -C server
+
+clean:
+	make -C bppsource clean
+	make -C blocksend clean
+	make -C hksend clean
+	make -C lyric_test clean
+	make -C server clean
+	
