@@ -58,41 +58,29 @@ Debian prequisites
 sudo apt-get install libncurses5-dev flex bison gperf
 ```
 
+Get submodules
+
+```
+git submodule init
+git submodule update
+```
+
 Compiling libraries
 
 ```
-cd ed25519/src
-make
-cd ../..
-cd bppsource
-make
-cd ..
+make libraries
 ```
 
 Compiling genkey and generating public and private key
 
 ```
-cd keys
-make
-./genkey
-cd ..
+make keys
 ```
 
 Compiling the server agent and senders
 
 ```
-cd blocksend
-make
-cd ..
-cd hksend
-make
-cd ..
-cd lyric_test
-make
-cd ..
-cd server
-make
-cd ..
+make servers
 ```
 
 Compiling and Flashing the ESP32 Client
