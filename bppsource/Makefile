@@ -6,4 +6,4 @@ libbppsource.a: $(OBJS)
 
 .PHONY: clean
 clean:
-	rm libbppsource.a $(OBJS)
+	-rm libbppsource.a $(OBJS)
