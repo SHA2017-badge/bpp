@@ -102,7 +102,7 @@ source set_env.sh
 cd esp32-recv
 make defconfig
 make menuconfig
-# under 'Partition Table', select 'Factory app, two OTA definitions'
+# under 'Partition Table', select 'Custom partition CSV file' 'partitions.csv'
 make flash
 ```
 
