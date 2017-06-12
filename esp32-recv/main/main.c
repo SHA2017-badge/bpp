@@ -68,7 +68,7 @@ void doDeepSleep(int delayMs, void *arg) {
 
 void app_main(void)
 {
-    nvs_flash_init();
+    ESP_ERROR_CHECK( nvs_flash_init() );
     tcpip_adapter_init();
     ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -94,6 +94,11 @@ void app_main(void)
 
 	//Figure out which OTA partition we're *not* running from, pass that to the blockdev.
 	const esp_partition_t *otapart=esp_ota_get_next_update_partition(NULL);
+
+	if (otapart == NULL) {
+		fprintf(stderr, "No OTA partition found, this is required for BPP\n");
+		exit(-1);
+	}
 	
 	BlockdefIfFlatFlashDesc bdesc={
 		.major=otapart->type,
