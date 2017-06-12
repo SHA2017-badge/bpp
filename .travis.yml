@@ -24,7 +24,6 @@ install:
   git submodule update --init --recursive
 
 script:
-  - make ed25519       
   - make keys      
   - make
   - source set_env.sh		
