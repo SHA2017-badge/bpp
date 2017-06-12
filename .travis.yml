@@ -24,39 +24,6 @@ install:
   git submodule update --init --recursive
 
 script:
-  # Compile needed Edwards-curve stuff
-  - cd ed25519/src
-  - make
-  - cd ../..
-  # Compile bppsource library for connecting to the server
-  - cd bppsource
-  - make
-  - cd ..
-  # Make genkey and generate keys
-  - cd keys
-  - make
-  - ./genkey
-  - cd ..
-  # Compile blocksend app
-  - cd blocksend
-  - make
-  - cd ..
-  # Compile the Housekeeping server
-  - cd hksend
-  - make
-  - cd ..
-  # Compile the demo text server
-  - cd lyric_test
-  - make
-  - cd ..
-  # Compile the server
-  - cd server
-  - make
-  - cd ..
-  # Compile ESP32 client code
-  - source set_env.sh
-  - cd esp32-recv
-  - make defconfig
   - make
 
 notifications:
