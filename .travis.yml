@@ -24,6 +24,11 @@ install:
   git submodule update --init --recursive
 
 script:
+  - make keys      
+  - make
+  - source set_env.sh		
+  - cd esp32-recv		
+  - make defconfig		
   - make
 
 notifications:
