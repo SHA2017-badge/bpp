@@ -103,6 +103,8 @@ cd esp32-recv
 make defconfig
 make menuconfig
 # under 'Partition Table', select 'Custom partition CSV file' 'partitions.csv'
+# skip the 'erase_flash' step if you want to keep your non-volatile storage partition intact (but make sure it is there ;) ):
+make erase_flash 
 make flash
 ```
 
