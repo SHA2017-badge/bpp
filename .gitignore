@@ -13,3 +13,4 @@ recv/tst
 hksend/hkserver
 server/lastfecid.txt
 esp32-recv/sdkconfig
+esp32-recv/components/bpp-recv/pubkey.inc

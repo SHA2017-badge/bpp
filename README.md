@@ -75,6 +75,7 @@ Compiling genkey and generating public and private key
 
 ```
 make keys
+cp keys/pubkey.inc esp32-recv/components/bpp-recv
 ```
 
 Compiling the server agent and senders
