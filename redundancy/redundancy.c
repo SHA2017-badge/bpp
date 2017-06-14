@@ -208,8 +208,8 @@ gbf_invmatrix(gbf_int_t *matrix, int size)
 			for (k=0; k<size-1; k++)
 				row[k] = row[k+1] ^ gbf_mul(mul, invrow[k]);
 			row[size-1] = gbf_mul(mul, invrow[k]);
-        }
-    }
+		}
+	}
 }
 
 void
