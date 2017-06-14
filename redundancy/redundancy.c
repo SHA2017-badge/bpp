@@ -1,6 +1,7 @@
 #include <alloca.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "redundancy.h"
 
@@ -10,6 +11,8 @@ typedef uint8_t gbf_clmul_t;
 #define LU_NUM (1<<LU_BITS)
 #define LU_MASK (LU_NUM-1)
 #define LU_BLOCKS (GBF_BITS / LU_BITS)
+
+#define MAX_STACK_ALLOC 256
 
 static gbf_clmul_t gbf_clmul[LU_NUM*LU_NUM];
 static gbf_int_t gbf_clmod[LU_NUM];
@@ -231,7 +234,13 @@ gbf_encode_one(gbf_int_t *out, gbf_int_t *data, gbf_int_t vec, int num_frag, int
 //		exit(1);
 	}
 
-	gbf_int_t *x = (gbf_int_t *) alloca(sizeof(gbf_int_t) * num_frag);
+	gbf_int_t *x;
+	if (sizeof(gbf_int_t) * num_frag > MAX_STACK_ALLOC) {
+		x = (gbf_int_t *) malloc(sizeof(gbf_int_t) * num_frag);
+		assert(x != NULL); // FIXME: have to do this more gracefully
+	} else {
+		x = (gbf_int_t *) alloca(sizeof(gbf_int_t) * num_frag);
+	}
 
 	int i;
 	x[0] = 1;
@@ -246,13 +255,22 @@ gbf_encode_one(gbf_int_t *out, gbf_int_t *data, gbf_int_t vec, int num_frag, int
 			v ^= gbf_mul(*data++, x[j]);
 		*out++ = v;
 	}
+
+	if (sizeof(gbf_int_t) * num_frag > MAX_STACK_ALLOC) {
+		free(x);
+	}
 }
 
 void
 gbf_decode(gbf_int_t *out, gbf_int_t *data, gbf_int_t *vec, int num_frag, int size)
 {
-	// NOTE: this can grow huge..
-	gbf_int_t *x = (gbf_int_t *) alloca(sizeof(gbf_int_t) * num_frag * num_frag);
+	gbf_int_t *x;
+	if (sizeof(gbf_int_t) * num_frag * num_frag > MAX_STACK_ALLOC) {
+		x = (gbf_int_t *) malloc(sizeof(gbf_int_t) * num_frag * num_frag);
+		assert(x != NULL); // FIXME: have to do this more gracefully
+	} else {
+		x = (gbf_int_t *) alloca(sizeof(gbf_int_t) * num_frag * num_frag);
+	}
 
 	int i;
 	for (i=0; i<num_frag; i++)
@@ -276,5 +294,9 @@ gbf_decode(gbf_int_t *out, gbf_int_t *data, gbf_int_t *vec, int num_frag, int si
 				v ^= gbf_mul(data[k*size + j], x[i*num_frag + k]);
 			out[j*num_frag + i] = v;
 		}
+	}
+
+	if (sizeof(gbf_int_t) * num_frag > MAX_STACK_ALLOC) {
+		free(x);
 	}
 }
