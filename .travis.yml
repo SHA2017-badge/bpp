@@ -25,6 +25,7 @@ install:
 
 script:
   - make keys      
+  - cp keys/pubkey.inc esp32-recv/components/bpp-recv
   - make
   - source set_env.sh		
   - cd esp32-recv		
