@@ -317,7 +317,7 @@ static bool wifiMonLookForBppPacket() {
 	needWork=WORK_CAPT_BSSID;
 	int chan=1;
 	tout=12*3;
-	while (needWork!=WORK_IDLE && tout--) {
+	while (needWork!=WORK_IDLE && --tout) {
 		chan++;
 		if (chan==14) chan=1;
 		ESP_ERROR_CHECK(esp_wifi_set_channel(chan,WIFI_SECOND_CHAN_NONE));
@@ -331,7 +331,7 @@ static bool wifiMonLookForBppPacket() {
 	printf("wifiMonTask: Have found bpp packets on chan %d.\n", chan);
 	needWork=WORK_BSSID_TO_ESSID;
 	tout=20;
-	while (needWork!=WORK_IDLE && tout--) {
+	while (needWork!=WORK_IDLE && --tout) {
 		vTaskDelay(100/portTICK_RATE_MS);
 	}
 	if (tout==0) {
