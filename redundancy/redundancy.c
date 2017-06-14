@@ -112,11 +112,7 @@ gbf_int_t
 gbf_inv(gbf_int_t r)
 {
 	// remove the special-cases. these cause overflows in our algorithm..
-	if (r == 0)
-	{
-		printf("gbf_inv(0): ERROR!\n");
-		return 0;
-	}
+	assert(r != 0); // the inverse of 0 doesn't exist.
 
 	if (r == 1)
 		return 1;
@@ -175,12 +171,7 @@ gbf_inv(gbf_int_t r)
 		{ gbf_int_t tmp = old_t; old_t = t; t = tmp; } // swap(t, old_t)
 	}
 
-	if (old_r != 1)
-	{
-		// should not happen in our chosen fields?
-		printf("gbf_inv(0): ERROR!\n");
-		return 0;
-	}
+	assert(old_r == 1); // should not happen. something's wrong with our binary field.
 
 	return t ^ old_t;
 }
@@ -190,11 +181,7 @@ gbf_inv(gbf_int_t r)
 gbf_int_t
 gbf_inv_phi(gbf_int_t v1)
 {
-	if (v1 == 0)
-	{
-		printf("gbf_inv(0): ERROR!\n");
-		return 0;
-	}
+	assert(v1 != 0); // the inverse of 0 doesn't exist.
 
 	return gbf_pwr(v1, -2);
 }
@@ -228,11 +215,7 @@ gbf_invmatrix(gbf_int_t *matrix, int size)
 void
 gbf_encode_one(gbf_int_t *out, gbf_int_t *data, gbf_int_t vec, int num_frag, int size)
 {
-	if (vec == 0)
-	{
-		printf("gbf_encode_one(vec=0): ERROR!\n");
-//		exit(1);
-	}
+	assert(vec != 0); // not allowed to use vec 0.
 
 	gbf_int_t *x;
 	if (sizeof(gbf_int_t) * num_frag > MAX_STACK_ALLOC) {
