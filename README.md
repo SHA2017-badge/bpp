@@ -90,7 +90,9 @@ source set_env.sh
 cd esp32-recv
 make defconfig
 make menuconfig
-# under 'Partition Table', select 'Factory app, two OTA definitions'
+# under 'Partition Table', select 'Custom partition CSV file' 'partitions.csv' when you have 16MB of flash or 'partitions-4MB.csv' when you have 4MB of flash (work in progress)
+# skip the 'erase_flash' step if you want to keep your non-volatile storage partition intact (but make sure it is there ;) ):
+make erase_flash 
 make flash
 ```
 
