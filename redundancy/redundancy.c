@@ -279,7 +279,7 @@ gbf_decode(gbf_int_t *out, gbf_int_t *data, gbf_int_t *vec, int num_frag, int si
 		}
 	}
 
-	if (sizeof(gbf_int_t) * num_frag > MAX_STACK_ALLOC) {
+	if (sizeof(gbf_int_t) * num_frag * num_frag > MAX_STACK_ALLOC) {
 		free(x);
 	}
 }
