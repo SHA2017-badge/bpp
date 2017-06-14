@@ -179,7 +179,7 @@ uint32_t updateTimestamps() {
 	}
 	r=write(f, fileTimestamps, (noBlocks())*sizeof(uint32_t));
 	if (r!=(noBlocks())*sizeof(uint32_t)) {
-		printf("%s: (%d/%d)", fnbuf, r, fileSize);
+		printf("%s: (%d/%zu)", fnbuf, r, fileSize);
 		perror("writing timestamp_tmp");
 		exit(1);
 	}
@@ -455,7 +455,7 @@ int main(int argc, char **argv) {
 	}
 	free(fnbuf);
 
-	printf("Initialized. File size is %d K, %d blocks.\n", fileSize/1024, noBlocks());
+	printf("Initialized. File size is %zu K, %d blocks.\n", fileSize/1024, noBlocks());
 	mainLoop();
 }
 

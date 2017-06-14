@@ -8,10 +8,12 @@ user-friendly and flexible).
 */
 
 #define _XOPEN_SOURCE
+#define _BSD_SOURCE
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include "sendif.h"
