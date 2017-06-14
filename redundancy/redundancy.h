@@ -3,17 +3,23 @@
 
 #include <stdint.h>
 
+// define the size of our finite field (galois binary field)
 #define GBF_BITS 16
 
 /* used word-size and known-good polynomes */
 #if GBF_BITS == 32
  typedef uint32_t gbf_int_t;
+ // polynome: x^32 + x^7 + x^3 + x^2 + 1
  #define GBF_POLYNOME 0x8d
+
 #elif GBF_BITS == 16
  typedef uint16_t gbf_int_t;
+ // polynome: x^16 + x^5 + x^3 + x + 1
  #define GBF_POLYNOME 0x2b
+
 #elif GBF_BITS == 8
  typedef uint8_t gbf_int_t;
+ // polynome: x^8 + x^4 + x^3 + x + 1
  #define GBF_POLYNOME 0x1b
 #endif
 
