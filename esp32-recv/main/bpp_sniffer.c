@@ -240,6 +240,8 @@ static void sniffcb(void *buf, wifi_promiscuous_pkt_type_t type) {
 			iph=(IpHdr*)pl;
 		}
 
+		if (iph->proto != 17) return; // discard non-UDP packets
+
 		len-=sizeof(IpHdr);
 		if (len<0) return;
 
