@@ -2,6 +2,7 @@
 *.a
 recv/recv
 server/bbpsender
+server/bppsender
 keys/genkey
 keys/privkey.inc
 keys/pubkey.inc
