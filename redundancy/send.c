@@ -21,12 +21,14 @@ struct packet_hdr {
 	int size;             // length of data (<n> elements of gbf_int_t)
 	gbf_int_t pkt_id;     // 1..MAX
 	gbf_int_t num_frag;   // number of packets needed to reassemble
+	gbf_int_t data[0];
 	// gbf_int_t data[size];
 	// struct ecc_signature sig;
 } __attribute__((packed));
 
 struct block_hdr {
 	int size;             // length of data (in bytes)
+	uint8_t data[0];
 	// uint8_t data[size];
 	// struct ecc_signature sig;
 } __attribute__((packed));
