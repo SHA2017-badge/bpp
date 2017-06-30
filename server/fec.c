@@ -15,14 +15,22 @@ parity packet.
 #include "sendif.h"
 #include "structs.h"
 #include <time.h>
+#include "fec.h"
 
-//Emit a parity packet every FEC_M packets
-#define FEC_M 3
+extern FecGenerator fecGenParity;
+
+static FecGenerator *gens[]={
+	&fecGenParity,
+	NULL
+};
+
+static FecGenerator *currGen=NULL;
+
+static int currK, currN;
 
 static int sendMaxPktLen;
 static SendCb *sendCb;
 static int serial=0;
-static uint8_t *parPacket;
 
 static time_t tsLastSaved;
 
@@ -31,8 +39,6 @@ static time_t tsLastSaved;
 void fecInit(SendCb *cb, int maxlen) {
 	sendCb=cb;
 	sendMaxPktLen=maxlen;
-	parPacket=malloc(maxlen);
-	memset(parPacket, 0, maxlen);
 	char buff[128];
 	FILE *f=fopen(TSFILE, "r");
 	if (f!=NULL) {
@@ -40,32 +46,27 @@ void fecInit(SendCb *cb, int maxlen) {
 		serial=atoi(buff);
 		fclose(f);
 	}
+	if (serial==0) serial=1; //because serial==0 is special
 	tsLastSaved=time(NULL);
+	currGen=gens[0];
+	currK=3;
+	currN=4;
+	currGen->init(currK, currN, maxlen);
+}
+
+void fecSendFecced(uint8_t *packet, size_t len) {
+	FecPacket *p=malloc(sizeof(FecPacket)+len);
+	p->serial=htonl(serial);
+	memcpy(p->data, packet, len);
+	sendCb((uint8_t*)p, sizeof(FecPacket)+len);
+	serial++;
+	free(p);
 }
 
 
 void fecSend(uint8_t *packet, size_t len) {
-	int fecMaxPacketLen=(sendMaxPktLen-sizeof(FecPacket)); //max data in a fec packet
-	FecPacket *p=malloc(sizeof(FecPacket)+fecMaxPacketLen);
-	p->serial=htonl(serial);
-	memcpy(p->data, packet, len);
-	//Clear rest of packet to not leak stuff
-	memset(p->data+len, 0, fecMaxPacketLen-len);
-	//Add packet to parity
-	for (int x=0; x<fecMaxPacketLen; x++) parPacket[x]^=p->data[x];
-	sendCb((uint8_t*)p, sendMaxPktLen);
-	serial++;
-	//See if it's time to send the parity packet already.
-	if ((serial % (FEC_M+1)) == FEC_M) {
-		//Yes it is! Re-use p to send parity data.
-		p->serial=htonl(serial);
-		memcpy(p->data, parPacket, fecMaxPacketLen);
-		sendCb((uint8_t*)p, sendMaxPktLen);
-		serial++;
-		//Zero out parity array for next set of packets.
-		memset(parPacket, 0, fecMaxPacketLen);
-	}
-	//Save timestamp in case of crash/quit every 10 secs
+	currGen->send(packet, len, serial, fecSendFecced);
+	//Save timestamp every 10 secs in case of crash/quit
 	if (time(NULL)-tsLastSaved > 10) {
 		FILE *f;
 		f=fopen(TSFILE".tmp", "w");
@@ -73,8 +74,17 @@ void fecSend(uint8_t *packet, size_t len) {
 		fclose(f);
 		rename(TSFILE".tmp", TSFILE);
 		tsLastSaved=time(NULL);
+
+		//Semi-hack: We use the same timer to send out the FEC parameters
+		FecPacket *p=malloc(sizeof(FecPacket)+sizeof(FecDesc));
+		p->serial=htonl(0);
+		FecDesc *dsc=(FecDesc*)p->data;
+		dsc->k=htons(currK);
+		dsc->n=htons(currN);
+		dsc->fecAlgoId=currGen->genId;
+		sendCb(p, sizeof(FecPacket)+sizeof(FecDesc));
+		free(p);
 	}
-	free(p);
 }
 
 
