@@ -18,8 +18,10 @@ parity packet.
 #include "fec.h"
 
 extern FecGenerator fecGenParity;
+extern FecGenerator fecGenRs;
 
 static FecGenerator *gens[]={
+	&fecGenRs,
 	&fecGenParity,
 	NULL
 };
@@ -51,10 +53,10 @@ void fecInit(SendCb *cb, int maxlen) {
 	currGen=gens[0];
 	currK=3;
 	currN=4;
-	currGen->init(currK, currN, maxlen);
+	currGen->init(currK, currN, maxlen-sizeof(FecPacket));
 }
 
-uin32_t fecSendFecced(uint8_t *packet, size_t len) {
+uint32_t fecSendFecced(uint8_t *packet, size_t len) {
 	FecPacket *p=malloc(sizeof(FecPacket)+len);
 	p->serial=htonl(serial);
 	memcpy(p->data, packet, len);
@@ -78,12 +80,12 @@ void fecSend(uint8_t *packet, size_t len) {
 
 		//Semi-hack: We use the same timer to send out the FEC parameters
 		FecPacket *p=malloc(sizeof(FecPacket)+sizeof(FecDesc));
-		p->serial=htonl(0);
+		p->serial=0;
 		FecDesc *dsc=(FecDesc*)p->data;
 		dsc->k=htons(currK);
 		dsc->n=htons(currN);
 		dsc->fecAlgoId=currGen->genId;
-		sendCb(p, sizeof(FecPacket)+sizeof(FecDesc));
+		sendCb((uint8_t*)p, sizeof(FecPacket)+sizeof(FecDesc));
 		free(p);
 	}
 }

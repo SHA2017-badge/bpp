@@ -56,7 +56,7 @@ void defecRecv(uint8_t *packet, size_t len) {
 		//Special packet: contains fec parameters
 		if (plLen<sizeof(FecDesc)) return;
 		FecDesc *d=(FecDesc*)p->data;
-		if (currDecoder==0 || \
+		if (currDecoder==NULL || \
 				currDecoder->algId!=d->fecAlgoId || \
 				currK!=d->k || \
 				currN!=d->n) {
