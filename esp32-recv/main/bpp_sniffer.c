@@ -240,7 +240,6 @@ static void sniffcb(void *buf, wifi_promiscuous_pkt_type_t type) {
 			iph=(IpHdr*)pl;
 		}
 
-		if (iph->proto != 17) return; // discard non-UDP packets
 
 		len-=sizeof(IpHdr);
 		if (len<0) return;
@@ -251,18 +250,21 @@ static void sniffcb(void *buf, wifi_promiscuous_pkt_type_t type) {
 
 		len-=(ip_ihl-5)*4;
 		if (len<0) return;
+		if (iph->proto != 17) return; // discard non-UDP packets
 
 //		hexdump(&iph->payload[(ip_ihl-5)*4], len-0x20);
 		if (len<sizeof(UdpHdr)) return;
 		UdpHdr *uh=(UdpHdr*)&iph->payload[(ip_ihl-5)*4];
 		if (ntohs(uh->len) < len-4) return; //-4 because WiFi packets have 4-byte CRC appended
 		int udppllen=ntohs(uh->len)-sizeof(UdpHdr);
-//		printf("Rem len %d udp len %d ", len-4, ntohs(uh->len));
-//		printf("Packet ");
-//		printip(iph->src);
-//		printf(":%d -> ", ntohs(uh->srcPort));
-//		printip(iph->dst);
-//		printf(":%d\n", ntohs(uh->dstPort));
+#if 0
+		printf("Rem len %d udp len %d ", len-4, ntohs(uh->len));
+		printf("Packet ");
+		printip(iph->src);
+		printf(":%d -> ", ntohs(uh->srcPort));
+		printip(iph->dst);
+		printf(":%d\n", ntohs(uh->dstPort));
+#endif
 
 		if (ntohs(uh->dstPort)!=2017) return;
 		
@@ -352,7 +354,6 @@ channel with the packet with the highest RSSI in highestRssiChan. Will return fa
 no beacon with that SSID is received.
 */
 static bool wifiMonGetHighestRssi() {
-	//ToDo: scan for said ssid, find best AP, listen on that channel.
 	highestRssi=-255;
 	highestRssiChan=-1;
 	needWork=WORK_GET_HIGHEST_RSSI;
@@ -450,9 +451,12 @@ static void wifiMonTask(void *arg) {
 
 void bppWifiSnifferStart() {
 	packetRingbuf=xRingbufferCreate(8*1024, RINGBUF_TYPE_NOSPLIT);
-
+	const wifi_promiscuous_filter_t filt={
+		.filter_mask=WIFI_PROMIS_FILTER_MASK_MGMT|WIFI_PROMIS_FILTER_MASK_DATA
+	};
 	ESP_ERROR_CHECK(esp_wifi_set_promiscuous_rx_cb(sniffcb));
 	ESP_ERROR_CHECK(esp_wifi_set_promiscuous(1));
+	ESP_ERROR_CHECK(esp_wifi_set_promiscuous_filter(&filt));
 	ESP_ERROR_CHECK(esp_wifi_set_channel(1,WIFI_SECOND_CHAN_NONE));
 	
 	xTaskCreatePinnedToCore(parseTask, "bppparse", 8192, NULL, 3, NULL, 1);

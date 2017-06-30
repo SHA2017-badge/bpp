@@ -21,6 +21,18 @@ typedef struct {
 }  __attribute__ ((packed)) FecPacket;
 
 
+//A serial of 0 means something special: it defines the FEC parameters in use.
+typedef struct {
+	uint16_t k;
+	uint16_t n;
+	uint8_t fecAlgoId;
+} __attribute__ ((packed)) FecDesc;
+
+
+#define FEC_ID_PARITY 0 //Simple parity addition
+#define FEC_ID_RS 1     //Reed-Solomon with tsd's code
+
+
 //Randomly chosen
 #define SERDES_MAGIC 0x1A014AF5
 
@@ -112,4 +124,8 @@ typedef struct {
 	uint8_t data[];
 } __attribute__ ((packed)) BDPacketChange;
 
+
+/*
+
+*/
 
