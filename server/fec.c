@@ -54,13 +54,14 @@ void fecInit(SendCb *cb, int maxlen) {
 	currGen->init(currK, currN, maxlen);
 }
 
-void fecSendFecced(uint8_t *packet, size_t len) {
+uin32_t fecSendFecced(uint8_t *packet, size_t len) {
 	FecPacket *p=malloc(sizeof(FecPacket)+len);
 	p->serial=htonl(serial);
 	memcpy(p->data, packet, len);
 	sendCb((uint8_t*)p, sizeof(FecPacket)+len);
 	serial++;
 	free(p);
+	return serial;
 }
 
 

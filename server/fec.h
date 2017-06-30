@@ -3,7 +3,8 @@
 
 #include "sendif.h"
 
-typedef void (*FecSendFeccedPacket)(uint8_t *packet, size_t len);
+//returns new serial
+typedef uint32_t (*FecSendFeccedPacket)(uint8_t *packet, size_t len);
 
 //WARNING: it is assumed that every packet sent through these functions will have length=maxsize
 //Emit n packets out for every k packets in

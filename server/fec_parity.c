@@ -25,7 +25,7 @@ int parSend(uint8_t *packet, size_t len, int serial, FecSendFeccedPacket sendFn)
 	for (int i=0; i<len; i++) parPacket[i]^=packet[i];
 	if (biggestLen<len) biggestLen=len;
 	//Send packet
-	sendFn(packet, len);
+	serial=sendFn(packet, len);
 	//See if we need to send parity packet
 	int p=serial%(parM+1);
 	if (p==parM) {
