@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include "sendif.h"
 #include "structs.h"
 #include "fec.h"
@@ -26,6 +27,7 @@ static int rsInit(int k, int n, int maxsize) {
 }
 
 static int rsSend(uint8_t *packet, size_t len, int serial, FecSendFeccedPacket sendFn) {
+	assert(len==maxPacketLen);
 	if (packetsStored==0) {
 		//See if we're still in sync. If not, send a bunch of dummy packets to get in sync.
 		//Shouldn't happen outside maybe a switch to this algo.
@@ -34,16 +36,16 @@ static int rsSend(uint8_t *packet, size_t len, int serial, FecSendFeccedPacket s
 			int toSend=parN-rp;
 			printf("Fec_RS: Out of sync! Need to send %d dummy packets.\n", toSend);
 			memset(packets, 0, maxPacketLen);
-			for (int i=0; i<toSend; i++) sendFn(packets, maxPacketLen);
+			for (int i=0; i<toSend; i++) serial=sendFn(packets, maxPacketLen);
+			assert((serial%parN)==0);
 		}
 	}
 	int p=(serial+packetsStored)%(parN);
-	printf("RS: Packet %d/%d (/%d)\n", p, parK, parN);
 	if (p<parK) {
 		memcpy(&packets[p*maxPacketLen], packet, len);
 		packetsStored++;
 	}
-	if (p==parN-1) {
+	if (p==parK-1) {
 		uint8_t *out=malloc(maxPacketLen);
 		//Received last of parK packets. Encode and send.
 		for (int i=0; i<parN; i++) {
