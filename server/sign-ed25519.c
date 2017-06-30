@@ -40,7 +40,7 @@ void signSend(uint8_t *packet, size_t len) {
 	
 	//Send
 	memcpy(p->data, packet, len);
-	sendCb((uint8_t*)p, sendMaxPktLen);
+	sendCb((uint8_t*)p, sizeof(SignedPacket)+len);
 	free(p);
 }
 
