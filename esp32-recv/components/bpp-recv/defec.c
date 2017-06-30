@@ -9,6 +9,7 @@ Try to ressurect missing packets using FEC
 #include "recvif.h"
 #include "structs.h"
 #include "defec.h"
+#include "esp_attr.h"
 
 extern const FecDecoder fecDecoderParity;
 extern const FecDecoder fecDecoderRs;
@@ -19,6 +20,11 @@ static const FecDecoder *decoders[]={
 	NULL
 };
 
+typedef struct {
+	int k, n, algId;
+} FecSavedStatus;
+
+static RTC_DATA_ATTR FecSavedStatus savedStatus;
 
 static RecvCb *recvCb;
 static const FecDecoder *currDecoder;
@@ -32,9 +38,19 @@ void defecInit(RecvCb *cb, int maxLen) {
 	currDecoder=decoders[0];
 	currK=3;
 	currN=4;
-	currDecoder->init(currK, currN, maxLen);
 	maxPacketSize=maxLen;
 	recvCb=cb;
+	if (savedStatus.k!=0 && savedStatus.n!=0) {
+		//restore status
+		int i;
+		currK=savedStatus.k;
+		currN=savedStatus.n;
+		for (i=0; decoders[i]!=NULL; i++) {
+			if (decoders[i]->algId==savedStatus.algId) break;
+		}
+		currDecoder=decoders[i];
+	}
+	currDecoder->init(currK, currN, maxLen);
 }
 
 void defecGetStatus(FecStatus *st) {
@@ -60,13 +76,16 @@ void defecRecv(uint8_t *packet, size_t len) {
 		FecDesc *d=(FecDesc*)p->data;
 		if (currDecoder==NULL || \
 				currDecoder->algId!=d->fecAlgoId || \
-				currK!=d->k || \
-				currN!=d->n) {
+				currK!=ntohs(d->k) || \
+				currN!=ntohs(d->n)) {
 			//Fec parameters changed. Close current decoder, open new one.
 			if (currDecoder) currDecoder->deinit();
 
 			currK=ntohs(d->k);
 			currN=ntohs(d->n);
+			savedStatus.k=currK;
+			savedStatus.n=currN;
+			savedStatus.algId=d->fecAlgoId;
 			int i;
 			for (i=0; decoders[i]!=NULL; i++) {
 				if (decoders[i]->algId==d->fecAlgoId) break;
