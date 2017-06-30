@@ -21,6 +21,7 @@ static int rsInit(int k, int n, int maxsize) {
 	packets=malloc(maxsize*k);
 	maxPacketLen=maxsize;
 	packetsStored=0;
+	gbf_init(GBF_POLYNOME);
 	return 1;
 }
 
@@ -36,7 +37,6 @@ static int rsSend(uint8_t *packet, size_t len, int serial, FecSendFeccedPacket s
 			for (int i=0; i<toSend; i++) sendFn(packets, maxPacketLen);
 		}
 	}
-
 	int p=(serial+packetsStored)%(parN);
 	printf("RS: Packet %d/%d (/%d)\n", p, parK, parN);
 	if (p<parK) {
@@ -47,7 +47,7 @@ static int rsSend(uint8_t *packet, size_t len, int serial, FecSendFeccedPacket s
 		uint8_t *out=malloc(maxPacketLen);
 		//Received last of parK packets. Encode and send.
 		for (int i=0; i<parN; i++) {
-			gbf_encode_one((gbf_int_t*)out, (gbf_int_t*) packets, serial, parN, parK);
+			gbf_encode_one((gbf_int_t*)out, (gbf_int_t*) packets, i+1, parK, (maxPacketLen/sizeof(gbf_int_t)));
 			serial=sendFn(out, maxPacketLen);
 		}
 		packetsStored=0;

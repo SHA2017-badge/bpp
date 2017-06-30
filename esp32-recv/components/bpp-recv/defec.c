@@ -11,9 +11,11 @@ Try to ressurect missing packets using FEC
 #include "defec.h"
 
 extern const FecDecoder fecDecoderParity;
+extern const FecDecoder fecDecoderRs;
 
 static const FecDecoder *decoders[]={
 	&fecDecoderParity,
+	&fecDecoderRs,
 	NULL
 };
 
@@ -63,8 +65,8 @@ void defecRecv(uint8_t *packet, size_t len) {
 			//Fec parameters changed. Close current decoder, open new one.
 			if (currDecoder) currDecoder->deinit();
 
-			currK=d->k;
-			currN=d->n;
+			currK=ntohs(d->k);
+			currN=ntohs(d->n);
 			int i;
 			for (i=0; decoders[i]!=NULL; i++) {
 				if (decoders[i]->algId==d->fecAlgoId) break;

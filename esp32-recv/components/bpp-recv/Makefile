@@ -2,7 +2,7 @@
 
 OBJS=main.o chksign_ed25519.o defec.o serdec.o hexdump.o subtitle.o hldemux.o \
 		bd_emu.o blockdecode.o blkidcache_mlvl.o partemu/partemu.o bd_flatflash.o\
-		 hkpackets.o powerdown.o
+		 hkpackets.o powerdown.o defec_rs.o defec_parity.o
 TARGET=recv
 CFLAGS=-ggdb -I ../common -I ../micro-ecc -I ../../../ed25519/src -I partemu -Og -DHOST_BUILD
 LDFLAGS=-lmbedtls -lmbedcrypto ../../../ed25519/src/libed25519.a
