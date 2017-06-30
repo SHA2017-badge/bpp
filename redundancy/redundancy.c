@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <alloca.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,12 +15,25 @@ typedef uint8_t gbf_clmul_t;
 
 #define MAX_STACK_ALLOC 256
 
+/** disable these extra checks on production-code */
+#define GBF_ENABLE_EXTRA_CHECKS
+
 static gbf_clmul_t gbf_clmul[LU_NUM*LU_NUM];
 static gbf_int_t gbf_clmod[LU_NUM];
+
+#ifdef GBF_ENABLE_EXTRA_CHECKS
+bool gbf_is_initialized = false;
+#endif // GBF_ENABLE_EXTRA_CHECKS
 
 void
 gbf_init(gbf_int_t polynome)
 {
+#ifdef GBF_ENABLE_EXTRA_CHECKS
+	// check if polynome looks sane. it still does not guarantee
+	// it is a good usable finite field.
+	assert(polynome & 1);
+#endif // GBF_ENABLE_EXTRA_CHECKS
+
 	int i;
 	for (i=0; i<LU_NUM; i++)
 	{
@@ -63,11 +77,17 @@ gbf_init(gbf_int_t polynome)
 		}
 		gbf_clmod[i] = v;
 	}
+#ifdef GBF_ENABLE_EXTRA_CHECKS
+	gbf_is_initialized = true;
+#endif // GBF_ENABLE_EXTRA_CHECKS
 }
 
 gbf_int_t
 gbf_mul(gbf_int_t v1, gbf_int_t v2)
 {
+#ifdef GBF_ENABLE_EXTRA_CHECKS
+	assert(gbf_is_initialized);
+#endif // GBF_ENABLE_EXTRA_CHECKS
 	gbf_int_t p = 0;
 
 	int bl;
@@ -113,6 +133,10 @@ gbf_inv(gbf_int_t r)
 {
 	// remove the special-cases. these cause overflows in our algorithm..
 	assert(r != 0); // the inverse of 0 doesn't exist.
+
+#ifdef GBF_ENABLE_EXTRA_CHECKS
+	assert(gbf_is_initialized);
+#endif // GBF_ENABLE_EXTRA_CHECKS
 
 	if (r == 1)
 		return 1;
@@ -247,6 +271,21 @@ gbf_encode_one(gbf_int_t *out, gbf_int_t *data, gbf_int_t vec, int num_frag, int
 void
 gbf_decode(gbf_int_t *out, gbf_int_t *data, gbf_int_t *vec, int num_frag, int size)
 {
+#ifdef GBF_ENABLE_EXTRA_CHECKS
+	// check if all vectors are different
+	{
+		int i,j;
+		for (i=0; i<num_frag; i++)
+		{
+			assert(vec[i] != 0);
+			for (j=i+1; j<num_frag; j++)
+			{
+				assert(vec[i] != vec[j]);
+			}
+		}
+	}
+#endif // GBF_ENABLE_EXTRA_CHECKS
+
 	gbf_int_t *x;
 	if (sizeof(gbf_int_t) * num_frag * num_frag > MAX_STACK_ALLOC) {
 		x = (gbf_int_t *) malloc(sizeof(gbf_int_t) * num_frag * num_frag);
