@@ -8,10 +8,10 @@
 
 
 static uint8_t *parPacket;
-int parM; //after how many packets to send a parity packet
-int biggestLen=0;
+static int parM; //after how many packets to send a parity packet
+static int biggestLen=0;
 
-int parInit(int k, int n, int maxsize) {
+static int parInit(int k, int n, int maxsize) {
 	if (n!=k+1) return 0;
 	parM=k;
 	parPacket=malloc(maxsize);
@@ -20,7 +20,7 @@ int parInit(int k, int n, int maxsize) {
 	return 1;
 }
 
-int parSend(uint8_t *packet, size_t len, int serial, FecSendFeccedPacket sendFn) {
+static int parSend(uint8_t *packet, size_t len, int serial, FecSendFeccedPacket sendFn) {
 	//Add to parity packet
 	for (int i=0; i<len; i++) parPacket[i]^=packet[i];
 	if (biggestLen<len) biggestLen=len;
@@ -36,7 +36,7 @@ int parSend(uint8_t *packet, size_t len, int serial, FecSendFeccedPacket sendFn)
 	return 1;
 }
 
-void parDeinit() {
+static void parDeinit() {
 	free(parPacket);
 	return;
 }
