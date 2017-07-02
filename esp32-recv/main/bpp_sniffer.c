@@ -382,6 +382,8 @@ static void wifiMonTask(void *arg) {
 		}
 		strncpy(wifiSavedStatus.ssid, ssidForBssid, 33);
 		wifiSavedStatus.channel=0;
+	} else {
+		printf("wifiMonTask: Connecting to saved ssid %s\n", wifiSavedStatus.ssid);
 	}
 	//We now have the ssid to connect to in wifiSavedStatus.ssid.
 	//Do we already have a channel we had good results with?
@@ -400,7 +402,8 @@ static void wifiMonTask(void *arg) {
 			timeToCheck=0;
 		}
 	} else {
-		timeToCheck=20;
+		printf("wifiMonTask: No last good channel for %s!\n", ssidForBssid);
+		timeToCheck=0;
 		powerCanSleep((int)wifiMonTask);
 	}
 
