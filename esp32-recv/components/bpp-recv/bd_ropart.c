@@ -34,7 +34,7 @@ struct BlockdevifHandle {
 	const esp_partition_t *part;
 	int descDataSizeBlks; //In blocks
 	spi_flash_mmap_handle_t descDataHandle;
-	FlashSectorDesc* descs;	//Mmapped sector descs
+	const FlashSectorDesc* descs;	//Mmapped sector descs
 	int descPos;			//Position to write next desc (tail of descs)
 	int descStart;			//1st desc (head of descs). Should be at the start of a block.
 	char* freeBitmap;		//Bitmap of sectors that are still free
@@ -81,7 +81,7 @@ static void markPhysFree(BlockdevifHandle *h, int physSect) {
 }
 
 BlockdevifHandle *blockdevifInit(void *desc, int size) {
-	BlockdefIfRoPartDesc *bdesc=(BlockdefIfRoPartDesc*)desc;
+	BlockdevIfRoPartDesc *bdesc=(BlockdevIfRoPartDesc*)desc;
 	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
 	if (h==NULL) goto error2;
 	//Make sure FlashSectorDesc fits in BLOCKDEV_BLKSZ an integer amount of times
@@ -95,15 +95,18 @@ BlockdevifHandle *blockdevifInit(void *desc, int size) {
 	}
 
 	h->descDataSizeBlks=(size/BLOCKDEV_BLKSZ*sizeof(FlashSectorDesc))/BLOCKDEV_BLKSZ+2;
-	h->size=(size/BLOCKDEV_BLKSZ)-h->descDataSizeBlks;
-	h->fsSize=h->size-(h->size/10); //reserve 10% for updates
-
+	h->size=(h->part->size/BLOCKDEV_BLKSZ)-h->descDataSizeBlks;
+	h->fsSize=(size+BLOCKDEV_BLKSZ-1)/BLOCKDEV_BLKSZ;
+	if (h->fsSize*BLOCKDEV_BLKSZ < size) {
+		printf("Can't put fs of %d blocks on rodata part with %d blocks available!\n", size/BLOCKDEV_BLKSZ, h->fsSize);
+		goto error2;
+	}
 
 	printf("bd_ropart: Managing partition of %d blocks (%dK). Bdesc is %d blocks, reserved len is %d blocks (%d K), fs size is %d blocks (%dK).\n",
-			size/BLOCKDEV_BLKSZ, size/1024, h->descDataSizeBlks, h->size-h->fsSize, (h->size-h->fsSize)*4, h->fsSize, h->fsSize*4);
+			h->part->size/BLOCKDEV_BLKSZ, h->part->size/1024, h->descDataSizeBlks, h->size-h->fsSize, (h->size-h->fsSize)*4, h->fsSize, h->fsSize*4);
 
 	//Mmap page descriptor buffer
-	esp_err_t r=esp_partition_mmap(h->part, h->size*BLOCKDEV_BLKSZ, h->descDataSizeBlks*BLOCKDEV_BLKSZ, SPI_FLASH_MMAP_DATA, (void**)&h->descs, &h->descDataHandle);
+	esp_err_t r=esp_partition_mmap(h->part, h->size*BLOCKDEV_BLKSZ, h->descDataSizeBlks*BLOCKDEV_BLKSZ, SPI_FLASH_MMAP_DATA, (const void**)&h->descs, &h->descDataHandle);
 	if (r!=ESP_OK) {
 		printf("Couldn't map page descriptors!\n");
 		goto error2;
@@ -202,6 +205,8 @@ and will write only the entries that are still up-to-date to the head of the jou
 static void doCleanup(BlockdevifHandle *h) {
 	int descsPerBlock=(BLOCKDEV_BLKSZ/sizeof(FlashSectorDesc));
 	int tailblkEnd=(h->descStart/descsPerBlock+1)*descsPerBlock;
+	printf("bd_ropart: Starting cleanup of desc %d to %d...\n", h->descStart, tailblkEnd);
+	int rel=0, dis=0;
 	for (int i=h->descStart; i<tailblkEnd; i++) {
 		if (descValid(&h->descs[i]) && !descEmpty(&h->descs[i])) {
 			int mostRecent=lastDescForVsect(h, h->descs[i].virtSector);
@@ -209,14 +214,20 @@ static void doCleanup(BlockdevifHandle *h) {
 			if (mostRecent==i) {
 				//Descriptor is still actual. Re-write.
 				writeNewDescNoClean(h, &h->descs[i]);
+				rel++;
 			} else {
 				//Sector itself shouldn't be referenced anymore.
 				markPhysFree(h, h->descs[i].physSector);
+				dis++;
 			}
 		}
 	}
+	printf("bd_ropart: Cleanup done. Of %d descs, relocated %d and discarded %d valid ones.\n", descsPerBlock, rel, dis);
 	//Okay, all data in block should be safe now. Nuke block.
-	esp_err_t r=esp_partition_erase_range(h->part, h->size+h->descStart/descsPerBlock, BLOCKDEV_BLKSZ);
+	esp_err_t r=esp_partition_erase_range(h->part, (h->size+h->descStart/descsPerBlock)*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);
+	//We can shift start pointer by a block.
+	h->descStart=tailblkEnd;
+	if (h->descStart >= descCount(h)) h->descStart=0;
 	assert(r==ESP_OK);
 }
 
@@ -279,14 +290,16 @@ int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff, uint
 	}
 
 	int tries=0;
-	int i=searchPos;
+	int i;
 	while(1) {
 		//Find free block
-		do {
-			if (h->freeBitmap[i/8]&(1<<(i&7))) break;
-			i++;
+		i=searchPos+1;
+		while (i!=searchPos) {
 			if (i>=h->size) i=0;
-		} while (i!=searchPos) ;
+			if (h->freeBitmap[i/8] & (1<<(i&7))) break;
+			printf("Desc %d in use.\n", i);
+			i++;
+		}
 		if (i!=searchPos) break; //found a free sector
 		//No free sector found. Try a cleanup run to free up a sector.
 		doCleanup(h);
@@ -316,7 +329,7 @@ void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *
 	}
 }
 
-BlockdevIf blockdefIfFlatFlash={
+BlockdevIf blockdevIfRoPart={
 	.init=blockdevifInit,
 	.setChangeID=blockdevifSetChangeID,
 	.getChangeID=blockdevifGetChangeID,

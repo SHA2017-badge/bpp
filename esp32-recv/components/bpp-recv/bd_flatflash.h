@@ -3,16 +3,16 @@
 
 #include "blockdevif.h"
 
-extern BlockdevIf blockdefIfFlatFlash;
+extern BlockdevIf blockdevIfFlatFlash;
 
-typedef void (*BlockdefIfFlatFlashDoneCb)(uint32_t changeid, void *arg);
+typedef void (*BlockdevIfFlatFlashDoneCb)(uint32_t changeid, void *arg);
 
 typedef struct {
 	int major;
 	int minor;
 	uint32_t minChangeId;
-	BlockdefIfFlatFlashDoneCb doneCb;
+	BlockdevIfFlatFlashDoneCb doneCb;
 	void *doneCbArg;
-} BlockdefIfFlatFlashDesc;
+} BlockdevIfFlatFlashDesc;
 
 #endif

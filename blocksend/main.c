@@ -125,7 +125,7 @@ uint32_t updateTimestamps() {
 		printf("ERROR: File size bigger than size configured! Truncating.\n");
 		fileSize=myConfig.size;
 	}
-	char *newBuf=malloc(noBlocks()*BLOCKSIZE);
+	char *newBuf=malloc(myConfig.size);
 	memset(newBuf, 0xff, noBlocks()*BLOCKSIZE);
 	lseek(f, 0, SEEK_SET);
 	int r=read(f, newBuf, fileSize);
@@ -425,13 +425,13 @@ int main(int argc, char **argv) {
 		}
 	}
 	//Allocate buffers and read in file
+	fileSize=lseek(f, 0, SEEK_END);
 	if (fileSize>myConfig.size) {
 		printf("ERROR: File size bigger than size configured! Truncating.\n");
 		fileSize=myConfig.size;
 	}
-	fileSize=lseek(f, 0, SEEK_END);
 	lseek(f, 0, SEEK_SET);
-	fileContents=malloc(fileSize);
+	fileContents=malloc(myConfig.size);
 	fileTimestamps=malloc(sizeof(uint32_t)*(myConfig.size/BLOCKSIZE));
 	r=read(f, fileContents, fileSize);
 	if (r!=fileSize) {

@@ -68,15 +68,15 @@ int main(int argc, char** argv) {
 	defecInit(serdecRecv, 1400);
 	serdecInit(hldemuxRecv);
 	
-//	blockdecodeInit(1, 8*1024*1024, &blockdefIfBdemu, "tst/blockdev");
-	BlockdefIfFlatFlashDesc bdesc={
+//	blockdecodeInit(1, 8*1024*1024, &blockdevIfBdemu, "tst/blockdev");
+	BlockdevIfFlatFlashDesc bdesc={
 		.major=0x12,
 		.minor=0x34,
 		.doneCb=flashDone,
 		.doneCbArg=NULL,
 		.minChangeId=1494667311
 	};
-	blockdecodeInit(1, 8*1024*1024, &blockdefIfFlatFlash, &bdesc);
+	blockdecodeInit(1, 8*1024*1024, &blockdevIfFlatFlash, &bdesc);
 	subtitleInit();
 	hkpacketsInit();
 

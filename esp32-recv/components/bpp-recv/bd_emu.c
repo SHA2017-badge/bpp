@@ -24,7 +24,7 @@ struct BlockdevifHandle {
 };
 
 static BlockdevifHandle *blockdevifInit(void *desc, int size) {
-	BlockdefIfBdemuDesc *bdesc=(BlockdefIfBdemuDesc*)desc;
+	BlockdevIfBdemuDesc *bdesc=(BlockdevIfBdemuDesc*)desc;
 	char buf[1024];
 	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
 	h->size=size;
@@ -96,7 +96,7 @@ static void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBl
 }
 
 
-BlockdevIf blockdefIfBdemu={
+BlockdevIf blockdevIfBdemu={
 	.init=blockdevifInit,
 	.setChangeID=blockdevifSetChangeID,
 	.getChangeID=blockdevifGetChangeID,

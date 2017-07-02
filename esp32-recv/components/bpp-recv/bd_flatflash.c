@@ -31,7 +31,7 @@ struct BlockdevifHandle {
 	int size;	//in blocks
 	const esp_partition_t *part;
 	FlashMgmtSector *msec;
-	BlockdefIfFlatFlashDoneCb doneCb;
+	BlockdevIfFlatFlashDoneCb doneCb;
 	void *doneCbArg;
 };
 
@@ -48,7 +48,7 @@ static void flushMgmtSector(BlockdevifHandle *handle) {
 }
 
 static BlockdevifHandle *blockdevifInit(void *desc, int size) {
-	BlockdefIfFlatFlashDesc *bdesc=(BlockdefIfFlatFlashDesc*)desc;
+	BlockdevIfFlatFlashDesc *bdesc=(BlockdevIfFlatFlashDesc*)desc;
 	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
 	if (h==NULL) goto error1;
 	h->part=esp_partition_find_first(bdesc->major, bdesc->minor, NULL);
@@ -150,7 +150,7 @@ static void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBl
 	}
 }
 
-BlockdevIf blockdefIfFlatFlash={
+BlockdevIf blockdevIfFlatFlash={
 	.init=blockdevifInit,
 	.setChangeID=blockdevifSetChangeID,
 	.getChangeID=blockdevifGetChangeID,

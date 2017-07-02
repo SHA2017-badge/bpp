@@ -4,10 +4,10 @@
 
 #include "blockdevif.h"
 
-extern BlockdevIf blockdefIfBdemu;
+extern BlockdevIf blockdevIfBdemu;
 
 
 typedef struct {
 	const char *file;
-} BlockdefIfBdemuDesc;
+} BlockdevIfBdemuDesc;
 #endif

@@ -22,6 +22,7 @@
 #include "blockdecode.h"
 #include "bd_emu.h"
 #include "bd_flatflash.h"
+#include "bd_ropart.h"
 #include "hkpackets.h"
 
 #include "esp_ota_ops.h"
@@ -100,16 +101,26 @@ void app_main(void)
 		exit(-1);
 	}
 	
-	BlockdefIfFlatFlashDesc bdesc={
+	BlockdevIfFlatFlashDesc bdesc_ota={
 		.major=otapart->type,
 		.minor=otapart->subtype,
 		.doneCb=flashDone,
 		.doneCbArg=(void*)otapart,
 		.minChangeId=chgid
 	};
-	int otasize=otapart->size-4096; //&blockdefIfFlatFlash uses the last block for metadata
-	otablockdecoder=blockdecodeInit(1, otasize, &blockdefIfFlatFlash, &bdesc);
-	printf("Initialized ota blockdev listener; maj=%x min=%x size=%d\n", bdesc.major, bdesc.minor, otasize);
+	int otasize=otapart->size-4096; //&blockdevIfFlatFlash uses the last block for metadata
+	otablockdecoder=blockdecodeInit(1, otasize, &blockdevIfFlatFlash, &bdesc_ota);
+	printf("Initialized ota blockdev listener; maj=%x min=%x size=%d\n", bdesc_ota.major, bdesc_ota.minor, otasize);
+
+	BlockdevIfFlatFlashDesc bdesc_fat={
+		.major=0x20,
+		.minor=0x17,
+	};
+	int bpsize=(8192-800)*1024;
+	otablockdecoder=blockdecodeInit(3, bpsize, &blockdevIfRoPart, &bdesc_fat);
+	printf("Initialized ropart blockdev listener; size=%d\n", bpsize);
+
+
 	subtitleInit();
 	hkpacketsInit();
 

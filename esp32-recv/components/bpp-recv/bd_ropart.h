@@ -1,14 +1,14 @@
-#ifndef BD_FLATFLASH_H
-#define BD_FLATFLASH_H
+#ifndef BD_ROPART_H
+#define BD_ROPART_H
 
 #include "blockdevif.h"
 
-extern BlockdevIf blockdefIfRoPart;
+extern BlockdevIf blockdevIfRoPart;
 
 
 typedef struct {
 	int major;
 	int minor;
-} BlockdefIfRoPartDesc;
+} BlockdevIfRoPartDesc;
 
 #endif
