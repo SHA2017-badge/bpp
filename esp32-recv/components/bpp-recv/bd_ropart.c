@@ -324,8 +324,12 @@ int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff, uint
 void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {
 	for (int i=0; i<handle->fsSize; i++) {
 		int j=lastDescForVsect(handle, i);
-		uint32_t chid=handle->descs[j].changeId;
-		cb(i, chid, arg);
+		if (j>=0) {
+			uint32_t chid=handle->descs[j].changeId;
+			cb(i, chid, arg);
+		} else {
+			cb(i, 0, arg);
+		}
 	}
 }
 

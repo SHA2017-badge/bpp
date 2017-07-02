@@ -43,6 +43,7 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
 
 
 BlockDecodeHandle *otablockdecoder;
+BlockDecodeHandle *ropartblockdecoder;
 
 void flashDone(uint32_t changeId, void *arg) {
 	esp_partition_t *otapart=(esp_partition_t*)arg;
@@ -117,7 +118,7 @@ void app_main(void)
 		.minor=0x17,
 	};
 	int bpsize=(8192-800)*1024;
-	otablockdecoder=blockdecodeInit(3, bpsize, &blockdevIfRoPart, &bdesc_fat);
+	ropartblockdecoder=blockdecodeInit(3, bpsize, &blockdevIfRoPart, &bdesc_fat);
 	printf("Initialized ropart blockdev listener; size=%d\n", bpsize);
 
 

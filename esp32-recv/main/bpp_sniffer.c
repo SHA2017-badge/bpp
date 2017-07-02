@@ -285,7 +285,8 @@ static void sniffcb(void *buf, wifi_promiscuous_pkt_type_t type) {
 }
 
 
-BlockDecodeHandle *otablockdecoder;
+extern BlockDecodeHandle *otablockdecoder;
+extern BlockDecodeHandle *ropartblockdecoder;
 
 //Parser task. This receives the packets from the WiFi sniffer and uses the bpp stack to parse them.
 //Any bpp callbacks/operations run in the context of this stack.
@@ -303,7 +304,8 @@ static void parseTask(void *arg) {
 		}
 		vRingbufferReturnItem(packetRingbuf, p);
 		t++;
-		if ((t&63)==0) blockdecodeStatus(otablockdecoder);
+		if ((t&127)==0) blockdecodeStatus(otablockdecoder);
+		if ((t&127)==63) blockdecodeStatus(ropartblockdecoder);
 	}
 }
 
