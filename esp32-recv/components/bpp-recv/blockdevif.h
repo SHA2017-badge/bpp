@@ -14,7 +14,7 @@ typedef struct {
 	void (*setChangeID)(BlockdevifHandle *handle, int sector, uint32_t changeId);
 	uint32_t (*getChangeID)(BlockdevifHandle *handle, int sector);
 	int (*getSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff);
-	int (*setSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff);
+	int (*setSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t adv_id); //adv_id is advisory changeid and doesn't need to be taken into account
 	void (*forEachBlock)(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg);
 } BlockdevIf;
 
