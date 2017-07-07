@@ -26,6 +26,7 @@ typedef struct {
 	unsigned int virtSector:12;
 	uint8_t chsum;				//Should be to all the bytes in this struct added with carry-wraparound, with chsum=0 during calculation
 }   __attribute__ ((packed)) FlashSectorDesc;
+//Desc is 8 bytes, so I should be able to fit 512 in a 4K block...
 
 
 struct BlockdevifHandle {
@@ -80,7 +81,7 @@ static void markPhysFree(BlockdevifHandle *h, int physSect) {
 	h->freeBitmap[physSect/8]|=(1<<(physSect&7));
 }
 
-BlockdevifHandle *blockdevifInit(void *desc, int size) {
+static BlockdevifHandle *blockdevifInit(void *desc, int size) {
 	BlockdevIfRoPartDesc *bdesc=(BlockdevIfRoPartDesc*)desc;
 	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
 	if (h==NULL) goto error2;
@@ -165,8 +166,9 @@ error2:
 	return NULL;
 }
 
+
 //Will return the most recent descriptor describing Vsector vsect, or -1 if none found.
-int lastDescForVsect(BlockdevifHandle *h, int vsect) {
+static int lastDescForVsect(BlockdevifHandle *h, int vsect) {
 	int i=h->descPos;
 	while (i!=h->descStart) {
 		i--;
@@ -194,7 +196,9 @@ static void writeNewDescNoClean(BlockdevifHandle *h, const FlashSectorDesc *d) {
 	newd.chsum=chs;
 
 	//Write to flash
-	esp_err_t r=esp_partition_write(h->part, h->size+(h->descPos*sizeof(FlashSectorDesc)), &newd, sizeof(FlashSectorDesc));
+	esp_err_t r=esp_partition_write(h->part, (h->size*BLOCKDEV_BLKSZ)+(h->descPos*sizeof(FlashSectorDesc)), &newd, sizeof(FlashSectorDesc));
+	printf("bd_ropart: Written desc %d\n", h->descPos);
+	h->descPos++;
 	assert(r==ESP_OK);
 }
 
@@ -233,7 +237,7 @@ static void doCleanup(BlockdevifHandle *h) {
 
 static int freeDescs(BlockdevifHandle *h) {
 	int freeDescNo;
-	freeDescNo=h->descPos-h->descStart;
+	freeDescNo= h->descStart - h->descPos;
 	if (freeDescNo<0) freeDescNo+=descCount(h);
 	return freeDescNo;
 }
@@ -243,7 +247,7 @@ static int freeDescs(BlockdevifHandle *h) {
 static void writeNewDesc(BlockdevifHandle *h, FlashSectorDesc *d) {
 	int tries=0;
 	while (freeDescs(h)<(BLOCKDEV_BLKSZ/sizeof(FlashSectorDesc))) {
-		printf("bd_ropart: Less than one block of descs left. Doing cleanup...\n");
+		printf("bd_ropart: Less than one block (%d) of descs left. Doing cleanup...\n", freeDescs(h));
 		doCleanup(h);
 		printf("bd_ropart: %d descs left.\n", freeDescs(h));
 		tries++;
@@ -253,7 +257,7 @@ static void writeNewDesc(BlockdevifHandle *h, FlashSectorDesc *d) {
 }
 
 
-void blockdevifSetChangeID(BlockdevifHandle *h, int sector, uint32_t changeId) {
+static void blockdevifSetChangeID(BlockdevifHandle *h, int sector, uint32_t changeId) {
 	int i=lastDescForVsect(h, sector);
 	if (i==-1) {
 		printf("bd_ropart: requested new changeid for sector %d but sector isn't written yet!\n", sector);
@@ -269,20 +273,20 @@ void blockdevifSetChangeID(BlockdevifHandle *h, int sector, uint32_t changeId) {
 
 
 
-uint32_t blockdevifGetChangeID(BlockdevifHandle *h, int sector) {
+static uint32_t blockdevifGetChangeID(BlockdevifHandle *h, int sector) {
 	int i=lastDescForVsect(h, sector);
 	if (i==-1) return 0;
 	return h->descs[i].changeId;
 }
 
-int blockdevifGetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff) {
+static int blockdevifGetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff) {
 	int i=lastDescForVsect(h, sector);
-	if (i==-1) return false;
+	if (i==-1) return 0;
 	esp_err_t r=esp_partition_read(h->part, h->descs[i].physSector*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
 	return (r==ESP_OK);
 }
 
-int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff, uint32_t adv_id) {
+static int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff, uint32_t adv_id) {
 	static int searchPos=0;
 	if (sector>=h->fsSize) {
 		printf("bt_ropart: Huh? Trying to write sector %d\n", sector);
@@ -315,13 +319,13 @@ int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff, uint
 	newd.virtSector=sector;
 	writeNewDesc(h, &newd);
 
-	esp_partition_erase_range(h->part, sector*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);
-	esp_partition_write(h->part, sector*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
+	esp_partition_erase_range(h->part, i*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);
+	esp_partition_write(h->part, i*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
 
 	return 1;
 }
 
-void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {
+static void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {
 	for (int i=0; i<handle->fsSize; i++) {
 		int j=lastDescForVsect(handle, i);
 		if (j>=0) {
@@ -341,5 +345,9 @@ BlockdevIf blockdevIfRoPart={
 	.setSectorData=blockdevifSetSectorData,
 	.forEachBlock=blockdevifForEachBlock
 };
+
+
+
+
 
 

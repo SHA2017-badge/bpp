@@ -29,11 +29,15 @@
 #include "esp_partition.h"
 #include "nvs.h"
 #include "powerdown.h"
+#include <sys/types.h>
+#include <dirent.h>
+
 
 #include "freertos/ringbuf.h"
 
 #include "bpp_sniffer.h"
 
+#include "mountbd.h"
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -66,6 +70,22 @@ void doDeepSleep(int delayMs, void *arg) {
 	esp_deep_sleep_start();
 }
 
+
+void listdir(char *path, int lvl) {
+	DIR *dir=opendir(path);
+	if (dir==NULL) return;
+	char *pathb=malloc(1024);
+	struct dirent *ent;
+	while(1) {
+		ent=readdir(dir);
+		if (!ent) break;
+		for (int i=0; i<lvl; i++) printf(" ");
+		printf("%s/%s\n", path, ent->d_name);
+		sprintf(pathb, "%s/%s/", path, ent->d_name);
+		listdir(pathb, lvl+1);
+	}
+	free(pathb);
+}
 
 
 void app_main(void)
@@ -121,6 +141,10 @@ void app_main(void)
 	ropartblockdecoder=blockdecodeInit(3, bpsize, &blockdevIfRoPart, &bdesc_fat);
 	printf("Initialized ropart blockdev listener; size=%d\n", bpsize);
 
+	BlockdevifHandle *roparth=blockdecodeGetIf(ropartblockdecoder);
+	bd_mount(&blockdevIfRoPart, roparth, "/bppro", 16);
+
+	listdir("/bppro/", 0);
 
 	subtitleInit();
 	hkpacketsInit();

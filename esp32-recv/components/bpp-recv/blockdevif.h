@@ -4,7 +4,6 @@
 //Interface to an abstracted block device. Should have the capability of storing both sector change IDs 
 //as well as sector data.
 
-
 typedef struct BlockdevifHandle BlockdevifHandle;
 
 typedef void (BlockdevifForEachBlockFn)(int blockno, uint32_t changeId, void *arg);

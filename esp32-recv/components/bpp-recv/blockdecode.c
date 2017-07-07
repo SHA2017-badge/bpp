@@ -32,14 +32,16 @@ static int allBlocksUpToDate(BlockDecodeHandle *d) {
 	return 1;
 }
 
-
-
 void blockdecodeStatus(BlockDecodeHandle *d) {
 	printf("Blockdev status: changeid %d, blocks: (* is up-to-date)\n", d->currentChangeID);
 	for (int i=0; i<d->noBlocks; i++) {
 		if (idcacheGet(d->idcache, i) < d->currentChangeID) printf("."); else printf("*");
 	}
 	printf("\n");
+}
+
+BlockdevifHandle *blockdecodeGetIf(BlockDecodeHandle *d) {
+	return d->bdev;
 }
 
 
@@ -64,7 +66,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 		uint16_t noBits=ntohs(p->noBits);
 		powerHold((int)arg);
 		d->currentChangeID=idNew;
-		printf("Bitmap %d bits for %d blocks.\n", (len-sizeof(BDPacketBitmap))*8, d->noBlocks);
+		printf("Bitmap for %d->%d.\n", ntohl(p->changeIdOrig), idNew);
 		if ((len-sizeof(BDPacketBitmap)) > d->noBlocks/8) return; //encroyable!
 		//Update current block map: all blocks newer than changeIdOrig are still up-to-date and
 		//can be updated to changeIdNew.
@@ -85,7 +87,6 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 			powerCanSleep((int)arg);
 		} else {
 			d->state=ST_WAIT_DATA;
-			printf("Got bitmap.\n");
 		}
 	} else if (subtype==BDSYNC_SUBTYPE_OLDERMARKER) {
 		BDPacketOldermarker *p=(BDPacketOldermarker*)data;

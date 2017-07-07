@@ -455,7 +455,7 @@ static void wifiMonTask(void *arg) {
 
 
 void bppWifiSnifferStart() {
-	packetRingbuf=xRingbufferCreate(8*1024, RINGBUF_TYPE_NOSPLIT);
+	packetRingbuf=xRingbufferCreate(12*1024, RINGBUF_TYPE_NOSPLIT);
 	const wifi_promiscuous_filter_t filt={
 		.filter_mask=WIFI_PROMIS_FILTER_MASK_MGMT|WIFI_PROMIS_FILTER_MASK_DATA
 	};

@@ -10,6 +10,9 @@ that changeid. Delegates to the underlying block device for everything else.
 
 #define LEVELS 3
 
+void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int writeback);
+
+
 struct BlkIdCacheHandle {
 	BlockdevifHandle *blkdev;
 	uint8_t *bmp[LEVELS];
@@ -21,7 +24,7 @@ struct BlkIdCacheHandle {
 //called for each block when cache is created
 static void initCache(int blockno, uint32_t changeId, void *arg) {
 	BlkIdCacheHandle *h=(BlkIdCacheHandle*)arg;
-	idcacheSet(h, blockno, changeId);
+	idcacheSetInt(h, blockno, changeId, 0);
 }
 
 BlkIdCacheHandle *idcacheCreate(int size, BlockdevifHandle *blkdev, BlockdevIf *bdif) {
@@ -50,6 +53,10 @@ void idcacheFlushToStorage(BlkIdCacheHandle *h) {
 }
 
 void idcacheSet(BlkIdCacheHandle *h, int block, uint32_t id) {
+	idcacheSetInt(h, block, id, 1);
+}
+
+void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int writeback) {
 	//Kill bit in all levels but the one that has the same id. Also check if the id may
 	//be newer than anything we have.
 	int isNewer=1;
@@ -76,13 +83,13 @@ void idcacheSet(BlkIdCacheHandle *h, int block, uint32_t id) {
 		isSet=1;
 	}
 	if (!isSet) {
-		printf("idcacheSet: Huh, cache changeid (blk %d id %d) can't be handled by cache.", block, id);
-		h->bdif->setChangeID(h->blkdev, block, id);
+//		printf("idcacheSet: Huh, cache changeid (blk %d id %d) can't be handled by cache.", block, id);
+		if (writeback) h->bdif->setChangeID(h->blkdev, block, id);
 	}
 }
 
 void idcacheSetSectorData(BlkIdCacheHandle *h, int block, uint8_t *data, uint32_t id) {
-	idcacheSet(h, block, id);
+	idcacheSetInt(h, block, id, 1);
 	h->bdif->setSectorData(h->blkdev, block, data, id);
 }
 
@@ -95,7 +102,7 @@ uint32_t idcacheGet(BlkIdCacheHandle *h, int block) {
 		}
 	}
 	uint32_t id=h->bdif->getChangeID(h->blkdev, block);
-	idcacheSet(h, block, id); //may just as well update our own cache...
+	idcacheSetInt(h, block, id, 0); //may just as well update our own cache...
 	return id;
 }
 
