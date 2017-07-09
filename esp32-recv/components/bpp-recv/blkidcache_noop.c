@@ -1,6 +1,8 @@
 /*
 Trivial blkidcache that does zero caching at all. Use for testing or on backing that does not
 have issues reading/writing data often.
+
+WARNING: Deprecated. If anything, does not honour bdif->notifyComplete.
 */
 #include <stdio.h>
 #include <stdint.h>

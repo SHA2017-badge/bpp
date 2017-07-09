@@ -11,4 +11,7 @@ typedef struct {
 	int minor;
 } BlockdevIfRoPartDesc;
 
+void bdropartDumpJournal(BlockdevifHandle *h);
+
+
 #endif

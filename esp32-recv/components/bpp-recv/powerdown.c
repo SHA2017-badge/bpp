@@ -55,10 +55,11 @@ static void checkCanSleep() {
 			if (mssleep<2000) {
 				//Sleep req is too short.
 				//We're going to ignore this sleep request, and make the thing active again.
-//					printf("Power: Ref %x: can sleep for %d ms. Too short, making active again.\n", i->ref, mssleep);
+					printf("Power: Ref %x: can sleep for %d ms. Too short, making active again.\n", i->ref, mssleep);
 					i->state=ST_ACTIVE;
+					cannotSleep=1;
 			} else {
-//				printf("Power: Ref %x: can sleep for %d ms\n", i->ref, mssleep);
+				printf("Power: Ref %x: can sleep for %d ms\n", i->ref, mssleep);
 				if (canSleepForMs==-1 || mssleep<canSleepForMs) {
 					canSleepForMs=mssleep;
 				}

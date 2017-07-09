@@ -102,7 +102,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 			}
 			//Check if we're interested in the newer or older blocks, or neither.
 			if (oldest>ntohl(p->oldestNewTs)) {
-				printf("Blockdev: Grabbing new packets.\n");
+				printf("Blockdecode: Oldermarker: Grabbing new packets.\n");
 				//We're not that far behind: all packets we need will be following this announcement
 				//right now.
 				d->state=ST_WAIT_DATA;
@@ -118,11 +118,11 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 					}
 				}
 				if (needOldBlocks) {
-					printf("Blockdecode: Skipping new packets. Sleeping %d ms.\n", ntohl(p->delayMs));
-					powerCanSleepFor((int)arg, p->delayMs);
+					printf("Blockdecode: Oldermarker: Skipping new packets. Sleeping %d ms.\n", ntohl(p->delayMs));
+					powerCanSleepFor((int)arg, ntohl(p->delayMs));
 					d->state=ST_WAIT_DATA;
 				} else {
-					printf("Blockdev: Don't need any packets in this cycle. Sleeping\n");
+					printf("Blockdecode: Oldermarker: Don't need any packets in this cycle. Sleeping\n");
 					//Next cycle is entirely useless. Wait for next catalog marker so we can sleep until
 					//the next catalog comes.
 					d->state=ST_WAIT_CATALOG;

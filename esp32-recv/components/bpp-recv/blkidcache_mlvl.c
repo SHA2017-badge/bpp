@@ -7,6 +7,7 @@ that changeid. Delegates to the underlying block device for everything else.
 #include <stdlib.h>
 #include <string.h>
 #include "blkidcache.h"
+#include "bma.h"
 
 #define LEVELS 3
 
@@ -15,9 +16,9 @@ void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int writeback);
 
 struct BlkIdCacheHandle {
 	BlockdevifHandle *blkdev;
-	uint8_t *bmp[LEVELS];
+	Bma *bmp[LEVELS];
 	uint32_t id[LEVELS];
-	int size;
+	int size;			//in blocks
 	BlockdevIf *bdif;
 };
 
@@ -33,7 +34,7 @@ BlkIdCacheHandle *idcacheCreate(int size, BlockdevifHandle *blkdev, BlockdevIf *
 	ret->size=size;
 	ret->bdif=bdif;
 	for (int i=0; i<LEVELS; i++) {
-		ret->bmp[i]=malloc((size+7)/8);
+		ret->bmp[i]=bmaCreate(size);
 		ret->id[i]=0;
 	}
 	bdif->forEachBlock(blkdev, initCache, ret);
@@ -44,7 +45,7 @@ void idcacheFlushToStorage(BlkIdCacheHandle *h) {
 	printf("Flushing idcache to storage.\n");
 	for (int bl=0; bl<h->size; bl++) {
 		for (int i=0; i<LEVELS; i++) {
-			if (h->bmp[i][bl/8] & (1<<(bl&7))) {
+			if (bmaIsSet(h->bmp[i], bl)) {
 				h->bdif->setChangeID(h->blkdev, bl, h->id[i]);
 				break;
 			}
@@ -60,31 +61,38 @@ void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int writeback) {
 	//Kill bit in all levels but the one that has the same id. Also check if the id may
 	//be newer than anything we have.
 	int isNewer=1;
-	int isSet=0;
+	int isSet=-1; //contains the level bit was set in, or -1 if not set
 	for (int i=0; i<LEVELS; i++) {
+//		printf("Lvl %d chid %d\n", i, h->id[i]);
 		if (id <= h->id[i]) isNewer=0;
 		if (id != h->id[i]) {
-			h->bmp[i][block/8] &= ~(1<<(block&7));
+			bmaSet(h->bmp[i], block, 0);
 		} else {
-			h->bmp[i][block/8] |= (1<<(block&7));
-			isSet=1;
+			bmaSet(h->bmp[i], block, 1);
+			isSet=i;
 		}
 	}
 
 	if (isNewer) {
 		//Okay, we need to clean up a new level and use it for this ID.
 		int oldest=0;
-		for (int i=0; i<LEVELS; i++) {
-			if (h->id[i] < h->id[oldest]) oldest=i;
+		for (int j=0; j<LEVELS; j++) {
+			if (h->id[j] < h->id[oldest]) oldest=j;
 		}
 		h->id[oldest]=id;
-		memset(h->bmp[oldest], 0, h->size/8);
-		h->bmp[oldest][block/8] |= (1<<(block&7));
-		isSet=1;
+		bmaSetAll(h->bmp[oldest], 0);
+		bmaSet(h->bmp[oldest], block, 1);
+		isSet=oldest;
 	}
-	if (!isSet) {
-//		printf("idcacheSet: Huh, cache changeid (blk %d id %d) can't be handled by cache.", block, id);
+	if (isSet==-1) {
 		if (writeback) h->bdif->setChangeID(h->blkdev, block, id);
+	}
+	if (isSet!=-1 && h->bdif->notifyComplete) {
+//		printf("Cache: lvl %d chid %d: ", isSet, h->id[isSet]);
+//		bmaDump(h->bmp[isSet]);
+		if (bmaIsAllSet(h->bmp[isSet])) {
+			h->bdif->notifyComplete(h->blkdev, id);
+		}
 	}
 }
 
@@ -96,7 +104,7 @@ void idcacheSetSectorData(BlkIdCacheHandle *h, int block, uint8_t *data, uint32_
 
 uint32_t idcacheGet(BlkIdCacheHandle *h, int block) {
 	for (int i=0; i<LEVELS; i++) {
-		if (h->bmp[i][block/8] & (1<<(block&7))) {
+		if (bmaIsSet(h->bmp[i], block)) {
 //			printf("Got cached id %d for block %d\n", h->id[i], block);
 			return h->id[i];
 		}

@@ -13,7 +13,9 @@ sectors are old and need refreshing. That is why this info can be cached in RAM 
 
 typedef struct BlkIdCacheHandle BlkIdCacheHandle;
 
+//Size is in blocks.
 BlkIdCacheHandle *idcacheCreate(int size, BlockdevifHandle *blkdev, BlockdevIf *bdif);
+
 void idcacheSet(BlkIdCacheHandle *h, int block, uint32_t id);
 uint32_t idcacheGet(BlkIdCacheHandle *h, int block);
 void idcacheFlushToStorage(BlkIdCacheHandle *h);

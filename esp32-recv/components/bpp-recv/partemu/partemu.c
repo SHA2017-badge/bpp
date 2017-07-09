@@ -10,6 +10,7 @@ compile and test the flash blockdevice backends on a host cpu.
 #include <stdio.h>
 #include <stdlib.h>
 #include "esp_partition.h"
+#include <sys/mman.h>
 
 const esp_partition_t *esp_partition_find_first(esp_partition_type_t type, esp_partition_subtype_t subtype, const char *label) {
 	char buf[128];
@@ -56,4 +57,14 @@ esp_err_t esp_partition_erase_range(const esp_partition_t *part, uint32_t start_
 	write((int)part->address, buf, size);
 	return ESP_OK;
 }
+
+esp_err_t esp_partition_mmap(const esp_partition_t* partition, uint32_t offset, uint32_t size,
+                             spi_flash_mmap_memory_t memory,
+                             const void** out_ptr, spi_flash_mmap_handle_t* out_handle) {
+
+	*out_ptr=mmap(NULL, size, PROT_READ, MAP_SHARED, partition->address, offset);
+	assert (*out_ptr!=MAP_FAILED);
+	return ESP_OK;
+}
+
 
