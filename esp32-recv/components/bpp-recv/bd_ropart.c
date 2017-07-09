@@ -34,6 +34,7 @@ typedef struct {
 	unsigned int physSector:12;
 	unsigned int virtSector:12;
 	uint8_t chsum;				//Should be to all the bytes in this struct added with carry-wraparound, with chsum=0 during calculation
+								//MUST BE LAST ENTRY
 }   __attribute__ ((packed)) FlashSectorDesc;
 //Desc is 8 bytes, so I should be able to fit 512 in a 4K block...
 
@@ -59,17 +60,16 @@ sector is written, it is written to a random free sector, and an entry is added 
 the physical sector with the virtual sector.
 */
 
-static bool descValid(const FlashSectorDesc *desc) {
+static uint8_t calcChsum(const FlashSectorDesc *desc) {
 	uint8_t *data=(uint8_t*)desc;
-	int chs=0;
-	for (int i=0; i<sizeof(FlashSectorDesc); i++) chs+=data[i];
-	if (chs==sizeof(FlashSectorDesc)*0xff) {
-		return true; //erased sector is also valid
+	uint32_t chs=0;
+	for (int i=0; i<sizeof(FlashSectorDesc)-1; i++) {
+		chs+=data[i];
 	}
-	chs-=desc->chsum; //chsum is calculated with chsum field itself == 0
 	chs=(chs&0xff)+(chs>>8);
-	return (chs==desc->chsum);
+	return chs;
 }
+
 
 static bool descEmpty(const FlashSectorDesc *desc) {
 	uint8_t *data=(uint8_t*)desc;
@@ -77,6 +77,12 @@ static bool descEmpty(const FlashSectorDesc *desc) {
 		if (data[i]!=0xff) return false;
 	}
 	return true;
+}
+
+static bool descValid(const FlashSectorDesc *desc) {
+	bool r=(calcChsum(desc)==desc->chsum);
+	if (!r) r=descEmpty(desc);
+	return r;
 }
 
 //Shorthand routine to calculate the amount of descs in the desc space of the fs.
@@ -207,14 +213,15 @@ static void writeNewDescNoClean(BlockdevifHandle *h, const FlashSectorDesc *d) {
 	memcpy(&newd, d, sizeof(FlashSectorDesc));
 
 	//Make checksum valid.
-	newd.chsum=0;
-	int chs=0;
+	uint32_t chs=0;
 	uint8_t *bytes=(uint8_t*)&newd;
-	for (int i=0; i<sizeof(FlashSectorDesc); i++) {
+	for (int i=0; i<sizeof(FlashSectorDesc)-1; i++) {
 		chs+=bytes[i];
 	}
 	chs=(chs&0xff)+(chs>>8);
 	newd.chsum=chs;
+
+	assert(descValid(&newd));
 
 	//Write to flash
 	esp_err_t r=esp_partition_write(h->part, (h->size*BLOCKDEV_BLKSZ)+(h->descPos*sizeof(FlashSectorDesc)), &newd, sizeof(FlashSectorDesc));
@@ -311,7 +318,7 @@ static void writeNewDesc(BlockdevifHandle *h, FlashSectorDesc *d) {
 static void blockdevifSetChangeID(BlockdevifHandle *h, int sector, uint32_t changeId) {
 	int i=lastDescForVsect(h, sector);
 	if (i==-1) {
-		printf("bd_ropart: requested new changeid for sector %d but sector isn't written yet!\n", sector);
+//		printf("bd_ropart: requested new changeid for sector %d but sector isn't written yet!\n", sector);
 		return;
 	}
 	

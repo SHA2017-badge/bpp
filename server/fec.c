@@ -50,9 +50,9 @@ void fecInit(SendCb *cb, int maxlen) {
 	}
 	if (serial==0) serial=1; //because serial==0 is special
 	tsLastSaved=time(NULL);
-	currGen=gens[1];
-	currK=2;
-	currN=3;
+	currGen=gens[0];
+	currK=4;
+	currN=8;
 	currGen->init(currK, currN, maxlen-sizeof(FecPacket));
 }
 

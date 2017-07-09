@@ -34,10 +34,16 @@ static int allBlocksUpToDate(BlockDecodeHandle *d) {
 
 void blockdecodeStatus(BlockDecodeHandle *d) {
 	printf("Blockdev status: changeid %d, blocks: (* is up-to-date)\n", d->currentChangeID);
+	int ud=0;
 	for (int i=0; i<d->noBlocks; i++) {
-		if (idcacheGet(d->idcache, i) < d->currentChangeID) printf("."); else printf("*");
+		if (idcacheGet(d->idcache, i) < d->currentChangeID) {
+			printf(".");
+		} else {
+			 printf("*");
+			ud++;
+		}
 	}
-	printf("\n");
+	printf("\nUp-to-date block count: %d\n", ud);
 }
 
 BlockdevifHandle *blockdecodeGetIf(BlockDecodeHandle *d) {
@@ -183,7 +189,7 @@ BlockDecodeHandle *blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *b
 	d->noBlocks=size/BLOCKDEV_BLKSZ;
 	d->idcache=idcacheCreate(d->noBlocks, d->bdev, bdIf);
 	d->bdif=bdIf;
-	d->currentChangeID=0;
+	d->currentChangeID=idcacheGetLastChangeId(d->idcache);
 
 	hldemuxAddType(type, blockdecodeRecv, d);
 

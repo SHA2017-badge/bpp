@@ -425,8 +425,8 @@ static void wifiMonTask(void *arg) {
 			vTaskDelete(NULL);
 		}
 		int missedPct=fecStNw.packetsInTotal?(fecStNw.packetsInMissed*100)/fecStNw.packetsInTotal:0;
-		printf("wifiMonTask: Of the last %d packets, %d were not received.\n", fecStNw.packetsInTotal, missedPct);
-		if (fecStNw.packetsInTotal<2 || missedPct>15) {
+		printf("wifiMonTask: Of the last %d packets, %d (%d pct) were not received.\n", fecStNw.packetsInTotal, fecStNw.packetsInMissed, missedPct);
+		if (fecStNw.packetsInTotal<2 || missedPct>35) {
 			//Need to re-scan to see if we can find a better AP.
 			printf("wifiMonTask: Re-scanning for AP...\n");
 			bool ret=wifiMonGetHighestRssi();
