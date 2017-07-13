@@ -91,10 +91,14 @@ static inline int descCount(BlockdevifHandle *h) {
 }
 
 static void markPhysUsed(BlockdevifHandle *h, int physSect) {
+//	printf("Mark used %d\n", physSect);
+	assert(bmaIsSet(h->freeBitmap, physSect));
 	bmaSet(h->freeBitmap, physSect, 0);
 }
 
 static void markPhysFree(BlockdevifHandle *h, int physSect) {
+//	printf("Mark free %d\n", physSect);
+	assert(!bmaIsSet(h->freeBitmap, physSect));
 	bmaSet(h->freeBitmap, physSect, 1);
 }
 
@@ -247,19 +251,21 @@ static void doCleanup(BlockdevifHandle *h) {
 	
 	//Theoretically, we can call a cleanup when the current write pointer is pointed within the block we're about to clean
 	//up... with pretty disasterous results. If this is the case, advance the pointer to the next block.
+	int searchEnd=tailblkEnd;
 	if (h->descPos>=h->descStart && h->descPos<tailblkEnd) {
 		int o=h->descPos;
+		//Effectively, we're 'writing' a number of empty sectors this way.
 		h->descPos=tailblkEnd;
+		searchEnd=o;
 		if (h->descPos>=descCount(h)) h->descPos=0;
 		printf("Write ptr (%d) is in block to be cleaned. Advancing to start of next block (%d).\n", o, h->descPos);
 	}
-
 
 	//For each virtual sector, we find the desc that is the most recent, and the one that is the most recent but
 	//at/before h->lastCompleteId (if that is set); these two are important. If the desc is one of those two, we 
 	//keep it by writing it in the current page of the journal; if not we kill it.
 	int rel=0, dis=0;
-	for (int i=h->descStart; i<tailblkEnd; i++) {
+	for (int i=h->descStart; i<searchEnd; i++) {
 		if (descValid(&h->descs[i]) && !descEmpty(&h->descs[i])) {
 			int mostRecent=lastDescForVsect(h, h->descs[i].virtSector);
 			int mostRecentSnapshotted;
@@ -269,17 +275,16 @@ static void doCleanup(BlockdevifHandle *h) {
 				mostRecentSnapshotted=-1;
 			}
 			assert(mostRecent>=0); //can't be null because it always can return the sector we're looking at.
-			printf("Desc %d, mostRecent=%d (%d) mostRecentSnapshotted=%d (%d)\n", 
+			printf("Desc %d, mostRecent=%d (%d) mostRecentSnapshotted=%d (%d). Desc phys=%d virt=%d\n", 
 						i, mostRecent, h->descs[mostRecent].changeId, 
-						mostRecentSnapshotted, (mostRecentSnapshotted>=0)?h->descs[mostRecentSnapshotted].changeId:-1);
+						mostRecentSnapshotted, (mostRecentSnapshotted>=0)?h->descs[mostRecentSnapshotted].changeId:-1,
+						h->descs[i].physSector, h->descs[i].virtSector);
 			if (mostRecent==i || mostRecentSnapshotted==i) {
 				//Descriptor is still actual. Re-write.
 				writeNewDescNoClean(h, &h->descs[i]);
 				rel++;
 			} else {
 //				printf("...Killed.\n");
-				//Sector itself shouldn't be referenced anymore.
-				markPhysFree(h, h->descs[i].physSector);
 				dis++;
 			}
 		}
@@ -290,6 +295,17 @@ static void doCleanup(BlockdevifHandle *h) {
 	//We can shift start pointer by a block.
 	h->descStart=tailblkEnd;
 	if (h->descStart >= descCount(h)) h->descStart=0;
+
+	//Now, re-initialize free sector bitmap.
+	bmaSetAll(h->freeBitmap, 1);
+	int i=h->descStart; 
+	while(i!=h->descPos) {
+		if (descValid(&h->descs[i]) && !descEmpty(&h->descs[i])) {
+			markPhysUsed(h, h->descs[i].physSector);
+		}
+		i++;
+		if (i>=descCount(h)) i=0;
+	}
 	assert(r==ESP_OK);
 }
 
@@ -362,13 +378,12 @@ static int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buf
 	int i;
 	while(1) {
 		//Find free block
-		i=searchPos+1;
-		if (i>=h->size) i=0;
-		while (i!=searchPos) {
-			if (bmaIsSet(h->freeBitmap, i)) break;
+		i=searchPos;
+		do {
 			i++;
 			if (i>=h->size) i=0;
-		}
+			if (bmaIsSet(h->freeBitmap, i)) break;
+		} while (i!=searchPos);
 		if (i!=searchPos) break; //found a free sector
 		//No free sector found. Try a cleanup run to free up a sector.
 		printf("bd_ropart: No free phys sectors left. Running cleanup, hope that helps...\n");
@@ -388,14 +403,31 @@ static int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buf
 			}
 		}
 	}
+
+//Paranoid check to see if virt sector actually is free
+#if 1
+	{
+		int j=h->descStart; 
+		while(j!=h->descPos) {
+			if (descValid(&h->descs[j]) && h->descs[j].physSector==i) {
+				printf("Desc %d: phys %d virt %d matches 'free' sector!\n", j, i, h->descs[j].virtSector);
+				assert(0 && "Phys sector mapped as free but found a desc to it!");
+			}
+			j++;
+			if (j>=descCount(h)) j=0;
+		}
+	}
+#endif
+
 	searchPos=i; //restart search from here next time
 
-	markPhysUsed(h, i);
 	FlashSectorDesc newd;
 	newd.changeId=adv_id;
 	newd.physSector=i;
 	newd.virtSector=sector;
 	writeNewDesc(h, &newd);
+	//Important: do this *after* writeNewDesc, otherwise a cleanup may reset the bit.
+	markPhysUsed(h, i);
 
 	printf("bd_ropart: Writing data for virt sect %d to phys sect %d.\n", sector, i);
 	esp_partition_erase_range(h->part, i*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);

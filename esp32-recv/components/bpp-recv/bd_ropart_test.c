@@ -160,7 +160,6 @@ int main(int argc, char** argv) {
 			assert(checkSector(bdif, h, i, i+200)==CS_OK);
 		}
 
-
 		printf("*** Brute-force testing.\n");
 		int secSeed[VIRT_SIZE];
 		for (int id=100; id<600; id++) {
@@ -176,6 +175,18 @@ int main(int argc, char** argv) {
 				assert(checkSector(bdif, h, i, secSeed[i])==CS_OK);
 			}
 		}
+		execlp(argv[0], argv[0], "3", NULL);
+	} else if (tstno==3) {
+		printf("*** Replacing entire contents\n");
+		for (int id=700; i<720; i++) {
+			for (i=0; i<VIRT_SIZE; i++) {
+				fillSector(cache, i, i, id);
+			}
+			for (i=0; i<VIRT_SIZE; i++) {
+				assert(checkSector(bdif, h, i, i)==CS_OK);
+			}
+		}
+
 	}
 
 }
