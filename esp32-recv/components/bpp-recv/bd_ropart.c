@@ -67,7 +67,7 @@ static uint8_t calcChsum(const FlashSectorDesc *desc) {
 		chs+=data[i];
 	}
 	chs=(chs&0xff)+(chs>>8);
-	return chs;
+	return ~chs; //Invert so all 0's isn't a valid sector.
 }
 
 
@@ -91,14 +91,10 @@ static inline int descCount(BlockdevifHandle *h) {
 }
 
 static void markPhysUsed(BlockdevifHandle *h, int physSect) {
-//	printf("Mark used %d\n", physSect);
-	assert(bmaIsSet(h->freeBitmap, physSect));
 	bmaSet(h->freeBitmap, physSect, 0);
 }
 
 static void markPhysFree(BlockdevifHandle *h, int physSect) {
-//	printf("Mark free %d\n", physSect);
-	assert(!bmaIsSet(h->freeBitmap, physSect));
 	bmaSet(h->freeBitmap, physSect, 1);
 }
 
@@ -106,6 +102,7 @@ static void markPhysFree(BlockdevifHandle *h, int physSect) {
 static int lastDescForVsectBefore(BlockdevifHandle *h, int vsect, uint32_t beforeId) {
 	int ret=-1;
 	int i=h->descStart; 
+	assert(h->descPos < descCount(h));
 	while(i!=h->descPos) {
 		if (descValid(&h->descs[i]) && h->descs[i].virtSector==vsect && h->descs[i].changeId<=beforeId) {
 			if (ret==-1 || h->descs[i].changeId > h->descs[ret].changeId) {
@@ -177,10 +174,13 @@ static BlockdevifHandle *blockdevifInit(void *desc, int size) {
 	bool prevEmpty=descEmpty(&h->descs[descCount(h)-1]);
 	for (int i=0; i<descCount(h); i++) {
 		bool curEmpty=descEmpty(&h->descs[i]);
+		printf("Desc %d: %s %s\n", i, curEmpty?"empty":"non-empty", descValid(&h->descs[i])?"valid":"invalid");
 		if (curEmpty && !prevEmpty) {
+			printf("Found head of descs at %d\n", i);
 			h->descPos=i;
 		} else if (prevEmpty && !curEmpty) {
-			h->descPos=i;
+			printf("Found tail of descs at %d\n", i);
+			h->descStart=i;
 		}
 		prevEmpty=curEmpty;
 		//See if this desc is valid and non-free. If so, the phys sector is in use and we can mark it as
@@ -192,7 +192,7 @@ static BlockdevifHandle *blockdevifInit(void *desc, int size) {
 	
 	int freeDescs=h->descPos-h->descStart;
 	if (freeDescs<0) freeDescs+=descCount(h);
-	printf("bd_ropart: %d descriptors, of which %d in use.\n", descCount(h), freeDescs);
+	printf("bd_ropart: %d descriptors, of which %d in use (head=%d tail=%d).\n", descCount(h), freeDescs, h->descPos, h->descStart);
 
 	int descstartOffsetBlockstart=h->descStart%(BLOCKDEV_BLKSZ/sizeof(FlashSectorDesc));
 	if (descstartOffsetBlockstart != 0) {
@@ -223,7 +223,7 @@ static void writeNewDescNoClean(BlockdevifHandle *h, const FlashSectorDesc *d) {
 		chs+=bytes[i];
 	}
 	chs=(chs&0xff)+(chs>>8);
-	newd.chsum=chs;
+	newd.chsum=~chs;
 
 	assert(descValid(&newd));
 
@@ -367,7 +367,7 @@ static int blockdevifGetSectorData(BlockdevifHandle *h, int sector, uint8_t *buf
 	return (r==ESP_OK);
 }
 
-static int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff, uint32_t adv_id) {
+static SetSectorDataRetVal blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buff, uint32_t adv_id) {
 	static int searchPos=0;
 	if (sector>=h->fsSize) {
 		printf("bt_ropart: Huh? Trying to write sector %d\n", sector);
@@ -420,20 +420,19 @@ static int blockdevifSetSectorData(BlockdevifHandle *h, int sector, uint8_t *buf
 #endif
 
 	searchPos=i; //restart search from here next time
-
 	FlashSectorDesc newd;
 	newd.changeId=adv_id;
 	newd.physSector=i;
 	newd.virtSector=sector;
 	writeNewDesc(h, &newd);
-	//Important: do this *after* writeNewDesc, otherwise a cleanup may reset the bit.
-	markPhysUsed(h, i);
 
 	printf("bd_ropart: Writing data for virt sect %d to phys sect %d.\n", sector, i);
 	esp_partition_erase_range(h->part, i*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);
 	esp_partition_write(h->part, i*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
+	//Important: do this *after* writeNewDesc, otherwise a cleanup may reset the bit.
+	markPhysUsed(h, i);
 
-	return 1;
+	return SSDR_SETCHID;
 }
 
 static void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {
@@ -449,8 +448,8 @@ static void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBl
 }
 
 static void blockdevifNotifyComplete(BlockdevifHandle *h, uint32_t id) {
-	printf("bd_ropart: NotifyComplete for id %d. Last marker we have is %d.\n", id, h->lastCompleteId);
 	if (h->lastCompleteId<id) {
+		printf("bd_ropart: NotifyComplete for id %d. Last marker we have is %d.\n", id, h->lastCompleteId);
 		h->lastCompleteId=id;
 	}
 }

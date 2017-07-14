@@ -314,6 +314,7 @@ void mainLoop() {
 		for (int i=0; bitmapTimes[i]!=0; i++) {
 			sendBitmapFor(time(NULL)-bitmapTimes[i], currId);
 		}
+		bppSet(bppCon, 'W', myConfig.blockflashtimems);
 
 		//Sort timestamps in a descending order (newest-first) so we can send out data that has changed
 		//the most recent the earliest.

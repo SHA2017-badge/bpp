@@ -6,10 +6,12 @@ Try to ressurect missing packets using FEC
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <freertos/portmacro.h>
 #include "recvif.h"
 #include "structs.h"
 #include "defec.h"
 #include "esp_attr.h"
+
 
 extern const FecDecoder fecDecoderParity;
 extern const FecDecoder fecDecoderRs;

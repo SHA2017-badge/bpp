@@ -127,7 +127,7 @@ static int blockdevifGetSectorData(BlockdevifHandle *handle, int sector, uint8_t
 	return (r==ESP_OK);
 }
 
-static int blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t adv_id) {
+static SetSectorDataRetVal blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t adv_id) {
 	if (sector>=handle->size) printf("Huh? Trying to write sector %d\n", sector);
 
 //	printf("Writing %p to block %d of size %d...\n", buff, sector, BLOCKDEV_BLKSZ);
@@ -140,7 +140,7 @@ static int blockdevifSetSectorData(BlockdevifHandle *handle, int sector, uint8_t
 	uint32_t dur=system_get_time()-start;
 
 //	printf("Block write: took %d msec writing %d erasing\n", dur/1000, durer/1000);
-	return 1;
+	return SSDR_SET; //Data set, ID ignored.
 }
 
 static void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {

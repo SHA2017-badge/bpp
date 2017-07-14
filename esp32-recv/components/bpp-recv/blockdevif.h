@@ -7,6 +7,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+typedef enum {
+	SSDR_ERROR=0,	//some error happened
+	SSDR_SET,		//data is set
+	SSDR_SETCHID	//data + changeId is set
+} SetSectorDataRetVal;
+
 typedef struct BlockdevifHandle BlockdevifHandle;
 
 typedef void (BlockdevifForEachBlockFn)(int blockno, uint32_t changeId, void *arg);
@@ -21,7 +27,7 @@ typedef struct {
 	uint32_t (*getChangeID)(BlockdevifHandle *handle, int sector);
 	//Set the data for a sector. adv_id is advisory changeid and doesn't need to be taken into account, but
 	//can be used if setting the changeId is 'free'.
-	int (*setSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t adv_id);
+	SetSectorDataRetVal (*setSectorData)(BlockdevifHandle *handle, int sector, uint8_t *buff, uint32_t adv_id);
 	//Get the data for a sector. WARNING: If the block device supports it, the block device returns
 	//the data that was current when notifyComplete was called, not the last written one. This allows
 	//the block device to return an integral snapshot, not whatever was halfway throiugh an update.
