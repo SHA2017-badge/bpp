@@ -45,7 +45,7 @@ static void checkCanSleep() {
 	int cannotSleep=0;
 	while (i!=NULL) {
 		if (i->state==ST_ACTIVE) {
-//			printf("Power: Ref %x: active\n", i->ref);
+			printf("Power: Ref %x: active\n", i->ref);
 			cannotSleep=1;
 		} else if (i->state==ST_CANSLEEP_UNTIL) {
 			struct timeval now;

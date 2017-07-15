@@ -22,10 +22,13 @@ what we can. This turns the FS unmountable for the duration of the update.
 #include "structs.h"
 #include "blockdevif.h"
 #include "bd_ropart.h"
-//#include "esp_system.h"
+#include "esp_system.h"
 #include "bma.h"
 
-//Change indicator. Special: if virtSector is 0xfff, it indicates the changeId as indicated is entirely available in memory.
+#define BD_PARANOID 0
+
+
+//Change indicator. Special: if virt/physSector is 0xfff, it indicates the changeId as indicated is entirely available in memory.
 //(That is: if you take the most recent sectors that have the indicated changeId and below, you have the full state of the filesystem at that
 //point in time. virtSector can normally never be 0xfff; because of spare sectors it's always less than the maximum of 0xfff for the
 //virtual sectors.
@@ -39,6 +42,7 @@ typedef struct {
 //Desc is 8 bytes, so I should be able to fit 512 in a 4K block...
 
 #define TOP_CHANGEID 0xFFFFFFFF
+#define LASTCOMPLETE_SECT_IND 0xFFF
 
 struct BlockdevifHandle {
 	int size;	//in blocks; after this the descs start
@@ -119,7 +123,6 @@ static int lastDescForVsect(BlockdevifHandle *h, int vsect) {
 	return lastDescForVsectBefore(h, vsect, TOP_CHANGEID);
 }
 
-
 static BlockdevifHandle *blockdevifInit(void *desc, int size) {
 	BlockdevIfRoPartDesc *bdesc=(BlockdevIfRoPartDesc*)desc;
 	BlockdevifHandle *h=malloc(sizeof(BlockdevifHandle));
@@ -134,7 +137,9 @@ static BlockdevifHandle *blockdevifInit(void *desc, int size) {
 		goto error2;
 	}
 
-	h->descDataSizeBlks=(size/BLOCKDEV_BLKSZ*sizeof(FlashSectorDesc))/BLOCKDEV_BLKSZ+2;
+	//We need a max of two descs per block (because we can have a current and a snapshot desc that may both point to the same phys sector) plus some
+	//spare so we can move the journal around as it gets full.
+	h->descDataSizeBlks=(((h->part->size/BLOCKDEV_BLKSZ)*sizeof(FlashSectorDesc))/BLOCKDEV_BLKSZ)*2+3;
 	h->size=(h->part->size/BLOCKDEV_BLKSZ)-h->descDataSizeBlks;
 	h->fsSize=(size+BLOCKDEV_BLKSZ-1)/BLOCKDEV_BLKSZ;
 	if (h->size*BLOCKDEV_BLKSZ < size) {
@@ -174,12 +179,12 @@ static BlockdevifHandle *blockdevifInit(void *desc, int size) {
 	bool prevEmpty=descEmpty(&h->descs[descCount(h)-1]);
 	for (int i=0; i<descCount(h); i++) {
 		bool curEmpty=descEmpty(&h->descs[i]);
-		printf("Desc %d: %s %s\n", i, curEmpty?"empty":"non-empty", descValid(&h->descs[i])?"valid":"invalid");
+		//printf("Desc %d: %s %s\n", i, curEmpty?"empty":"non-empty", descValid(&h->descs[i])?"valid":"invalid");
 		if (curEmpty && !prevEmpty) {
-			printf("Found head of descs at %d\n", i);
+			//printf("Found head of descs at %d\n", i);
 			h->descPos=i;
 		} else if (prevEmpty && !curEmpty) {
-			printf("Found tail of descs at %d\n", i);
+			//printf("Found tail of descs at %d\n", i);
 			h->descStart=i;
 		}
 		prevEmpty=curEmpty;
@@ -192,7 +197,6 @@ static BlockdevifHandle *blockdevifInit(void *desc, int size) {
 	
 	int freeDescs=h->descPos-h->descStart;
 	if (freeDescs<0) freeDescs+=descCount(h);
-	printf("bd_ropart: %d descriptors, of which %d in use (head=%d tail=%d).\n", descCount(h), freeDescs, h->descPos, h->descStart);
 
 	int descstartOffsetBlockstart=h->descStart%(BLOCKDEV_BLKSZ/sizeof(FlashSectorDesc));
 	if (descstartOffsetBlockstart != 0) {
@@ -200,9 +204,19 @@ static BlockdevifHandle *blockdevifInit(void *desc, int size) {
 		h->descStart+=(BLOCKDEV_BLKSZ/sizeof(FlashSectorDesc))-descstartOffsetBlockstart;
 	}
 
-	//This should be taken care of by the higher layers! For example, a cache layer that checks all the
-	//sectors and sends a notifyComplete here.
+	//Find lastCompleteID by finding most recent sector with virtsector=LASTCOMPLETE_SECT_IND
 	h->lastCompleteId=0;
+	int i=h->descStart; 
+	while(i!=h->descPos) {
+		if (descValid(&h->descs[i]) && h->descs[i].virtSector==LASTCOMPLETE_SECT_IND) {
+			h->lastCompleteId=h->descs[i].changeId;
+		}
+		i++;
+		if (i>=descCount(h)) i=0;
+	}
+
+	printf("bd_ropart: %d descriptors, of which %d in use (head=%d tail=%d). Last complete ID is %d.\n", descCount(h), freeDescs, h->descPos, h->descStart, h->lastCompleteId);
+
 
 	return h;
 
@@ -216,16 +230,11 @@ static void writeNewDescNoClean(BlockdevifHandle *h, const FlashSectorDesc *d) {
 	FlashSectorDesc newd;
 	memcpy(&newd, d, sizeof(FlashSectorDesc));
 
-	//Make checksum valid.
-	uint32_t chs=0;
-	uint8_t *bytes=(uint8_t*)&newd;
-	for (int i=0; i<sizeof(FlashSectorDesc)-1; i++) {
-		chs+=bytes[i];
-	}
-	chs=(chs&0xff)+(chs>>8);
-	newd.chsum=~chs;
+	newd.chsum=calcChsum(&newd);
 
+#if BD_PARANOID
 	assert(descValid(&newd));
+#endif
 
 	//Write to flash
 	esp_err_t r=esp_partition_write(h->part, (h->size*BLOCKDEV_BLKSZ)+(h->descPos*sizeof(FlashSectorDesc)), &newd, sizeof(FlashSectorDesc));
@@ -256,8 +265,8 @@ static void doCleanup(BlockdevifHandle *h) {
 		int o=h->descPos;
 		//Effectively, we're 'writing' a number of empty sectors this way.
 		h->descPos=tailblkEnd;
-		searchEnd=o;
 		if (h->descPos>=descCount(h)) h->descPos=0;
+		searchEnd=o;
 		printf("Write ptr (%d) is in block to be cleaned. Advancing to start of next block (%d).\n", o, h->descPos);
 	}
 
@@ -267,25 +276,38 @@ static void doCleanup(BlockdevifHandle *h) {
 	int rel=0, dis=0;
 	for (int i=h->descStart; i<searchEnd; i++) {
 		if (descValid(&h->descs[i]) && !descEmpty(&h->descs[i])) {
-			int mostRecent=lastDescForVsect(h, h->descs[i].virtSector);
-			int mostRecentSnapshotted;
-			if (h->lastCompleteId) {
-				mostRecentSnapshotted=lastDescForVsectBefore(h, h->descs[i].virtSector, h->lastCompleteId);
+			if (h->descs[i].virtSector!=LASTCOMPLETE_SECT_IND) {
+				int mostRecent=lastDescForVsect(h, h->descs[i].virtSector);
+				int mostRecentSnapshotted;
+				if (h->lastCompleteId) {
+					mostRecentSnapshotted=lastDescForVsectBefore(h, h->descs[i].virtSector, h->lastCompleteId);
+				} else {
+					mostRecentSnapshotted=-1;
+				}
+				assert(mostRecent>=0); //can't be null because it always can return the sector we're looking at.
+#if 1
+				printf("Desc %d, mostRecent=%d (%d) mostRecentSnapshotted=%d (%d). Desc phys=%d virt=%d\n", 
+							i, mostRecent, h->descs[mostRecent].changeId, 
+							mostRecentSnapshotted, (mostRecentSnapshotted>=0)?h->descs[mostRecentSnapshotted].changeId:-1,
+							h->descs[i].physSector, h->descs[i].virtSector);
+#endif
+				if (mostRecent==i || mostRecentSnapshotted==i) {
+					//Descriptor is still actual. Re-write.
+					writeNewDescNoClean(h, &h->descs[i]);
+					rel++;
+				} else {
+//					printf("...Killed.\n");
+					dis++;
+				}
 			} else {
-				mostRecentSnapshotted=-1;
-			}
-			assert(mostRecent>=0); //can't be null because it always can return the sector we're looking at.
-			printf("Desc %d, mostRecent=%d (%d) mostRecentSnapshotted=%d (%d). Desc phys=%d virt=%d\n", 
-						i, mostRecent, h->descs[mostRecent].changeId, 
-						mostRecentSnapshotted, (mostRecentSnapshotted>=0)?h->descs[mostRecentSnapshotted].changeId:-1,
-						h->descs[i].physSector, h->descs[i].virtSector);
-			if (mostRecent==i || mostRecentSnapshotted==i) {
-				//Descriptor is still actual. Re-write.
-				writeNewDescNoClean(h, &h->descs[i]);
-				rel++;
-			} else {
-//				printf("...Killed.\n");
-				dis++;
+				//Sector is a lastCompleteID indicator. Only write if still current.
+				if (h->descs[i].changeId==h->lastCompleteId) {
+					writeNewDescNoClean(h, &h->descs[i]);
+					rel++;
+				} else {
+					//Not up-to-date anymore. Discard.
+					dis++;
+				}
 			}
 		}
 	}
@@ -320,7 +342,7 @@ static int freeDescs(BlockdevifHandle *h) {
 //Writes a new descriptor. Runs a cleanup cycle if needed.
 static void writeNewDesc(BlockdevifHandle *h, FlashSectorDesc *d) {
 	int tries=0;
-	while (freeDescs(h)<(BLOCKDEV_BLKSZ/sizeof(FlashSectorDesc))) {
+	while (freeDescs(h)<=(BLOCKDEV_BLKSZ/sizeof(FlashSectorDesc))) {
 		printf("bd_ropart: Less than one block (%d) of descs left. Doing cleanup...\n", freeDescs(h));
 		doCleanup(h);
 		printf("bd_ropart: %d descs left.\n", freeDescs(h));
@@ -330,6 +352,14 @@ static void writeNewDesc(BlockdevifHandle *h, FlashSectorDesc *d) {
 	writeNewDescNoClean(h, d);
 }
 
+
+static void writeLastCompleteID(BlockdevifHandle *h) {
+	FlashSectorDesc newd;
+	newd.changeId=h->lastCompleteId;
+	newd.physSector=LASTCOMPLETE_SECT_IND;
+	newd.virtSector=LASTCOMPLETE_SECT_IND;
+	writeNewDesc(h, &newd);
+}
 
 static void blockdevifSetChangeID(BlockdevifHandle *h, int sector, uint32_t changeId) {
 	int i=lastDescForVsect(h, sector);
@@ -362,7 +392,7 @@ static int blockdevifGetSectorData(BlockdevifHandle *h, int sector, uint8_t *buf
 	int i=lastDescForVsectBefore(h, sector, h->lastCompleteId);
 	if (i==-1) return 0;
 	//Grab phys sector contents
-	printf("bd_ropart: Reading data for virt sect %d from phys sect %d.\n", sector, h->descs[i].physSector);
+	//printf("bd_ropart: Reading data for virt sect %d from phys sect %d.\n", sector, h->descs[i].physSector);
 	esp_err_t r=esp_partition_read(h->part, h->descs[i].physSector*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
 	return (r==ESP_OK);
 }
@@ -381,7 +411,7 @@ static SetSectorDataRetVal blockdevifSetSectorData(BlockdevifHandle *h, int sect
 		i=searchPos;
 		do {
 			i++;
-			if (i>=h->size) i=0;
+			if (i >= h->size) i=0;
 			if (bmaIsSet(h->freeBitmap, i)) break;
 		} while (i!=searchPos);
 		if (i!=searchPos) break; //found a free sector
@@ -405,7 +435,7 @@ static SetSectorDataRetVal blockdevifSetSectorData(BlockdevifHandle *h, int sect
 	}
 
 //Paranoid check to see if virt sector actually is free
-#if 1
+#if BD_PARANOID
 	{
 		int j=h->descStart; 
 		while(j!=h->descPos) {
@@ -426,6 +456,7 @@ static SetSectorDataRetVal blockdevifSetSectorData(BlockdevifHandle *h, int sect
 	newd.virtSector=sector;
 	writeNewDesc(h, &newd);
 
+	assert(i < h->size);
 	printf("bd_ropart: Writing data for virt sect %d to phys sect %d.\n", sector, i);
 	esp_partition_erase_range(h->part, i*BLOCKDEV_BLKSZ, BLOCKDEV_BLKSZ);
 	esp_partition_write(h->part, i*BLOCKDEV_BLKSZ, buff, BLOCKDEV_BLKSZ);
@@ -451,6 +482,7 @@ static void blockdevifNotifyComplete(BlockdevifHandle *h, uint32_t id) {
 	if (h->lastCompleteId<id) {
 		printf("bd_ropart: NotifyComplete for id %d. Last marker we have is %d.\n", id, h->lastCompleteId);
 		h->lastCompleteId=id;
+		writeLastCompleteID(h);
 	}
 }
 

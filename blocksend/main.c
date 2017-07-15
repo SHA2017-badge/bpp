@@ -306,13 +306,17 @@ void mainLoop() {
 	while(1) {
 		printf("Updating timestamps.\n");
 		int newId=updateTimestamps();
+		int baseId=time(NULL);
 		//Only change current ID if file actually updated.
-		if (newId!=0) currId=newId;
-
+		if (newId!=0) {
+			currId=newId;
+		} else {
+			baseId=currId;
+		}
 		printf("Send out bitmap catalogue\n");
 		//Send out the bitmap catalogue
 		for (int i=0; bitmapTimes[i]!=0; i++) {
-			sendBitmapFor(time(NULL)-bitmapTimes[i], currId);
+			sendBitmapFor(baseId-bitmapTimes[i], currId);
 		}
 		bppSet(bppCon, 'W', myConfig.blockflashtimems);
 

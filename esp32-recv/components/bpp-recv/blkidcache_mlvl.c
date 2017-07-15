@@ -40,6 +40,7 @@ BlkIdCacheHandle *idcacheCreate(int size, BlockdevifHandle *blkdev, BlockdevIf *
 	}
 	ret->chidFlushed=bmaCreate(size);
 	bmaSetAll(ret->chidFlushed, 1);
+	printf("blkidcache_mlvl: reading all block IDs\n");
 	bdif->forEachBlock(blkdev, initCache, ret);
 	printf("blkidcache_mlvl: initialized\n");
 	return ret;
@@ -47,16 +48,19 @@ BlkIdCacheHandle *idcacheCreate(int size, BlockdevifHandle *blkdev, BlockdevIf *
 
 void idcacheFlushToStorage(BlkIdCacheHandle *h) {
 	printf("Flushing idcache to storage.\n");
+	int flushed=0;
 	for (int bl=0; bl<h->size; bl++) {
 		if (!bmaIsSet(h->chidFlushed, bl)) {
 			for (int i=0; i<LEVELS; i++) {
 				if (bmaIsSet(h->bmp[i], bl)) {
 					h->bdif->setChangeID(h->blkdev, bl, h->id[i]);
-					break;
+					flushed++;
+					break; //level for loop
 				}
 			}
 		}
 	}
+	printf("Flushed %d descs.\n", flushed);
 	bmaSetAll(h->chidFlushed, 1);
 }
 
@@ -64,23 +68,24 @@ void idcacheSet(BlkIdCacheHandle *h, int block, uint32_t id) {
 	idcacheSetInt(h, block, id, 1);
 }
 
+//Writeback indicates if the change eventually needs to be written back to the backing
+//storage. 0 means it comes from there, so no need to write back.
 static void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int writeback) {
 	//Kill bit in all levels but the one that has the same id. Also check if the id may
 	//be newer than anything we have.
 	int isSet=-1; //contains the level bit was set in, or -1 if not set
-	for (int i=0; i<LEVELS; i++) {
-//		printf("Lvl %d chid %d\n", i, h->id[i]);
-		if (id != h->id[i]) {
+	for (int lvl=0; lvl<LEVELS; lvl++) {
+		if (id != h->id[lvl]) {
 			//Not in this level. Clear bit here.
-			bmaSet(h->bmp[i], block, 0);
+			bmaSet(h->bmp[lvl], block, 0);
 		} else {
 			//Set it in the level that corresponds to this ID
-			if (!bmaIsSet(h->bmp[i], block)) {
-				bmaSet(h->bmp[i], block, 1);
+			if (!bmaIsSet(h->bmp[lvl], block)) {
+				bmaSet(h->bmp[lvl], block, 1);
 				//Only recorded in levels, not in backing storage.
-				bmaSet(h->chidFlushed, block, 0);
+				if (writeback) bmaSet(h->chidFlushed, block, 0);
 			}
-			isSet=i;
+			isSet=lvl;
 		}
 	}
 
@@ -88,20 +93,23 @@ static void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int write
 		//No level to store this. See if the ID is newer than any of the IDs we have already; if so we can kick
 		//out the oldest and add this one.
 		int oldest=0;
-		for (int j=1; j<LEVELS; j++) {
-			if (h->id[j] < h->id[oldest]) oldest=j;
+		for (int lvl=1; lvl<LEVELS; lvl++) {
+			if (h->id[lvl] < h->id[oldest]) oldest=lvl;
 		}
 		if (h->id[oldest] < id) {
+			printf("blkidcache_mlvl: Level %d: clearing out old ID %d for new id %d\n", oldest, h->id[oldest], id);
 			//Flush out level to disk
-			for (int j=0; j<h->size; j++) {
-				if (bmaIsSet(h->bmp[oldest], j) && !bmaIsSet(h->chidFlushed, j)) {
-					h->bdif->setChangeID(h->blkdev, j, h->id[j]);
+			for (int blk=0; blk<h->size; blk++) {
+				if (bmaIsSet(h->bmp[oldest], blk) && (!bmaIsSet(h->chidFlushed, blk))) {
+					h->bdif->setChangeID(h->blkdev, blk, h->id[blk]);
+					bmaSet(h->chidFlushed, blk, 1);
 				}
 			}
 			//Re-use level for current one
 			h->id[oldest]=id;
 			bmaSetAll(h->bmp[oldest], 0);
 			bmaSet(h->bmp[oldest], block, 1);
+			if (writeback) bmaSet(h->chidFlushed, block, 0);
 			isSet=oldest;
 		}
 	}
@@ -124,13 +132,19 @@ static void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int write
 		}
 	}
 
-	printf("Cache: blk %d put in lvl %d chid %d\n ", block, isSet, id);
+	//printf("Cache: blk %d put in lvl %d chid %d\n ", block, isSet, id);
 
 }
 
 void idcacheSetSectorData(BlkIdCacheHandle *h, int block, uint8_t *data, uint32_t id) {
-	idcacheSetInt(h, block, id, 1);
-	h->bdif->setSectorData(h->blkdev, block, data, id);
+	SetSectorDataRetVal mr=h->bdif->setSectorData(h->blkdev, block, data, id);
+	
+	if (mr==SSDR_SETCHID) {
+		bmaSet(h->chidFlushed, block, 1);
+		idcacheSetInt(h, block, id, 0);
+	} else {
+		idcacheSetInt(h, block, id, 1);
+	}
 
 	static int setCtr=0;
 	setCtr++;
@@ -159,7 +173,6 @@ uint32_t idcacheGet(BlkIdCacheHandle *h, int block) {
 	}
 	printf("Blk %d not in cache.\n", block);
 	uint32_t id=h->bdif->getChangeID(h->blkdev, block);
-	idcacheSetInt(h, block, id, 0); //may just as well update our own cache...
 	return id;
 }
 

@@ -73,22 +73,29 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 		powerHold((int)arg);
 		d->currentChangeID=idNew;
 		printf("Bitmap for %d->%d.\n", ntohl(p->changeIdOrig), idNew);
-		if ((len-sizeof(BDPacketBitmap)) > d->noBlocks/8) return; //encroyable!
+		if ((len-sizeof(BDPacketBitmap)) > d->noBlocks/8) return; //Shouldn't happen
 		//Update current block map: all blocks newer than changeIdOrig are still up-to-date and
 		//can be updated to changeIdNew.
 		int i;
+		int updCount=0;
 		for (i=0; i<noBits; i++) {
 			//Update if bit is 1 in bitmap
 			if ( i >= (len-sizeof(BDPacketBitmap))*8 || p->bitmap[i/8]&(1<<(i&7))) {
-				if (idcacheGet(d->idcache, i)>=idOld) idcacheSet(d->idcache, i, d->currentChangeID);
+				//printf("Block %d set in bitmap. Its id is %d, id should be newer than %d to upgrade to %d.\n", i, idcacheGet(d->idcache, i), idOld, idNew);
+				if (idcacheGet(d->idcache, i)>=idOld) {
+					idcacheSet(d->idcache, i, d->currentChangeID);
+					updCount++;
+				}
 			}
 		}
 		//Rest of sectors not in bitmap is always assumed to be up-to-date.
 		for (; i<d->noBlocks; i++) idcacheSet(d->idcache, i, d->currentChangeID);
+		printf("Bitmap for %d->%d. Updated %d of %d sectors.\n", ntohl(p->changeIdOrig), idNew, updCount, d->noBlocks);
 		//See if that action updated all blocks
 		if (allBlocksUpToDate(d)) {
 			//Yay, we can sleep.
 			printf("All up to date. We can sleep.\n");
+			idcacheFlushToStorage(d->idcache);
 			d->state=ST_WAIT_CATALOG;
 			powerCanSleep((int)arg);
 		} else {
@@ -107,7 +114,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 				if (chgid<oldest) oldest=chgid;
 			}
 			//Check if we're interested in the newer or older blocks, or neither.
-			if (oldest>ntohl(p->oldestNewTs)) {
+			if (oldest > ntohl(p->oldestNewTs)) {
 				printf("Blockdecode: Oldermarker: Grabbing new packets.\n");
 				//We're not that far behind: all packets we need will be following this announcement
 				//right now.
@@ -124,8 +131,10 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 					}
 				}
 				if (needOldBlocks) {
-					printf("Blockdecode: Oldermarker: Skipping new packets. Sleeping %d ms.\n", ntohl(p->delayMs));
-					powerCanSleepFor((int)arg, ntohl(p->delayMs));
+					//While sleeping here is a Good Idea, waking up goes wrong... we don't remember we were interested in the old
+					//blocks and will immediately go to sleep until the catalog comes along again.
+//					printf("Blockdecode: Oldermarker: Skipping new packets. Sleeping %d ms.\n", ntohl(p->delayMs));
+//					powerCanSleepFor((int)arg, ntohl(p->delayMs));
 					d->state=ST_WAIT_DATA;
 				} else {
 					printf("Blockdecode: Oldermarker: Don't need any packets in this cycle. Sleeping\n");
@@ -190,6 +199,9 @@ BlockDecodeHandle *blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *b
 	d->idcache=idcacheCreate(d->noBlocks, d->bdev, bdIf);
 	d->bdif=bdIf;
 	d->currentChangeID=idcacheGetLastChangeId(d->idcache);
+
+
+//	powerHold((int)d);
 
 	hldemuxAddType(type, blockdecodeRecv, d);
 

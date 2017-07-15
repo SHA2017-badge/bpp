@@ -62,7 +62,7 @@ void flashDone(uint32_t changeId, void *arg) {
 }
 
 void doDeepSleep(int delayMs, void *arg) {
-	delayMs-=3000; //to compensate for startup delay
+	delayMs-=8000; //to compensate for startup delay
 	if (delayMs<5000) return; //not worth sleeping
 	printf("Sleeping for %d ms...\n", delayMs);
 	blockdecodeShutDown(otablockdecoder);

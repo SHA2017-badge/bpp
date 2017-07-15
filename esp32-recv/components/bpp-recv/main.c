@@ -126,9 +126,14 @@ int main(int argc, char** argv) {
 	subtitleInit();
 	hkpacketsInit();
 
+	int dly=0;
 	while((len = recvfrom(sock, buff, sizeof(buff), 0, NULL, 0)) >= 0) {
 		chksignRecv(buff, len);
 		if (simDeepSleepMs!=0) break;
+		if ((dly&255)==0) {
+			blockdecodeStatus(ropartblockdecoder);
+		}
+		dly++;
 	}
 	
 	close(sock);
