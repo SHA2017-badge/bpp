@@ -48,6 +48,11 @@ ToDo: Get rid of a gazillion behaviour-influencing magic numbers and turn them i
 #include "powerdown.h"
 
 #include "freertos/ringbuf.h"
+#include "bpp_udp.h"
+
+//#define BADGE_BPP_SERVER "badge-bpp.sha2017.org"
+#define BADGE_BPP_SERVER "badge-bpp.j0h.nl"
+//#define BADGE_BPP_SERVER "10.23.45.55"
 
 typedef struct {
 	uint8_t mac[6];
@@ -296,6 +301,12 @@ static void parseTask(void *arg) {
 	while(1) {
 		size_t len;
 		RecvedWifiPacket *p=(RecvedWifiPacket*)xRingbufferReceive(packetRingbuf, &len, portMAX_DELAY);
+		if (len==1) {
+			//Meta-packet to free up ringbuffer and exit thread.
+			vRingbufferReturnItem(packetRingbuf, p);
+			vRingbufferDelete(packetRingbuf);
+			vTaskDelete(NULL);
+		}
 		int success=chksignRecv(&p->data[0], len-sizeof(RecvedWifiPacket));
 		if (success && needWork==WORK_CAPT_BSSID) {
 			//Got a bssid that seems to send out valid badge packets. Mark the bssid.
@@ -366,13 +377,22 @@ static bool wifiMonGetHighestRssi() {
 	return highestRssiChan!=-1;
 }
 
-
 static void wifiMonTask(void *arg) {
 	FecStatus fecSt, fecStNw;
 	int timeToCheck;
 	int gotZeroPackets=0;
+#if 0
+	//hack: Immediate active UDP mode on fixed SSID for testing
+	vTaskDelay(100); 
+	esp_wifi_set_promiscuous(0);
+	vTaskDelay(20); //give everything time to shut down
+	xRingbufferSend(packetRingbuf, "q", 1, 0); //tell parser task to clean itself up
+	bppConnectUsingUdp("badge", BADGE_BPP_SERVER, 2017, (int)wifiMonTask);
+#endif
+
+
 	//Make sure to not shutdown directly.
-	powerHold((int)wifiMonTask);
+	powerHold((int)wifiMonTask, 10*1000);
 	//Okay, where were we? Do we already have a bssid?
 	if (wifiSavedStatus.ssid[0]==0) {
 		//Nope. Go look for it.
@@ -419,9 +439,17 @@ static void wifiMonTask(void *arg) {
 		defecGetStatus(&fecSt);
 		
 		if (fecStNw.packetsInTotal==0) gotZeroPackets++; else gotZeroPackets=0;
-		if (gotZeroPackets==2) {
-			//Hmm. Connected to a good AP, but don't get any packets. Maybe server is broken.
-			powerCanSleepFor((int)wifiMonTask, 5*60*1000);
+		if (gotZeroPackets>=2) {
+			//Hmm. Connected to a good AP, but don't get any packets. Maybe AP doesn't have any clients and as such doesn't send bpp stuff.
+			//Try to fix that by being a client for a while. connectUsingUdp should only return when an error happened.
+			printf("wifiMonTask: Attempting active connection.\n");
+			esp_wifi_set_promiscuous(0);
+			vTaskDelay(20); //give everything time to shut down
+			xRingbufferSend(packetRingbuf, "q", 1, 0); //tell parser task to clean itself up
+			bppConnectUsingUdp(ssidForBssid,BADGE_BPP_SERVER, 2017, (int)wifiMonTask);
+			//I got nuthin'. Sleep for a long time and retry.
+			printf("wifiMonTask: Active connection failed. I give up. Sleeping.\n");
+			powerCanSleepFor((int)wifiMonTask, 10*60*1000);
 			vTaskDelete(NULL);
 		}
 		int missedPct=fecStNw.packetsInTotal?(fecStNw.packetsInMissed*100)/fecStNw.packetsInTotal:0;

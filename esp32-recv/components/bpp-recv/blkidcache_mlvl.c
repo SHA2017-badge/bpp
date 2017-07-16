@@ -51,9 +51,10 @@ void idcacheFlushToStorage(BlkIdCacheHandle *h) {
 	int flushed=0;
 	for (int bl=0; bl<h->size; bl++) {
 		if (!bmaIsSet(h->chidFlushed, bl)) {
-			for (int i=0; i<LEVELS; i++) {
-				if (bmaIsSet(h->bmp[i], bl)) {
-					h->bdif->setChangeID(h->blkdev, bl, h->id[i]);
+//			printf("Bl %d flushable\n", bl);
+			for (int lvl=0; lvl<LEVELS; lvl++) {
+				if (bmaIsSet(h->bmp[lvl], bl)) {
+					h->bdif->setChangeID(h->blkdev, bl, h->id[lvl]);
 					flushed++;
 					break; //level for loop
 				}
@@ -83,7 +84,12 @@ static void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int write
 			if (!bmaIsSet(h->bmp[lvl], block)) {
 				bmaSet(h->bmp[lvl], block, 1);
 				//Only recorded in levels, not in backing storage.
-				if (writeback) bmaSet(h->chidFlushed, block, 0);
+				if (writeback) {
+					bmaSet(h->chidFlushed, block, 0);
+//					printf("Marked flushable %d\n", block);
+				}
+//			} else {
+//				printf("Already set %d\n", block);
 			}
 			isSet=lvl;
 		}
@@ -102,6 +108,7 @@ static void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int write
 			for (int blk=0; blk<h->size; blk++) {
 				if (bmaIsSet(h->bmp[oldest], blk) && (!bmaIsSet(h->chidFlushed, blk))) {
 					h->bdif->setChangeID(h->blkdev, blk, h->id[blk]);
+//					printf("Flushed %d\n", blk);
 					bmaSet(h->chidFlushed, blk, 1);
 				}
 			}
@@ -109,7 +116,10 @@ static void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int write
 			h->id[oldest]=id;
 			bmaSetAll(h->bmp[oldest], 0);
 			bmaSet(h->bmp[oldest], block, 1);
-			if (writeback) bmaSet(h->chidFlushed, block, 0);
+			if (writeback) {
+				bmaSet(h->chidFlushed, block, 0);
+//				printf("Marked flushable %d\n", block);
+			}
 			isSet=oldest;
 		}
 	}
@@ -120,6 +130,7 @@ static void idcacheSetInt(BlkIdCacheHandle *h, int block, uint32_t id, int write
 		if (writeback) {
 			h->bdif->setChangeID(h->blkdev, block, id);
 			bmaSet(h->chidFlushed, block, 1);
+//			printf("Flushed %d\n", block);
 		}
 	}
 

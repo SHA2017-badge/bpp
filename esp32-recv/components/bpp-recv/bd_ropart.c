@@ -27,7 +27,6 @@ what we can. This turns the FS unmountable for the duration of the update.
 
 #define BD_PARANOID 0
 
-
 //Change indicator. Special: if virt/physSector is 0xfff, it indicates the changeId as indicated is entirely available in memory.
 //(That is: if you take the most recent sectors that have the indicated changeId and below, you have the full state of the filesystem at that
 //point in time. virtSector can normally never be 0xfff; because of spare sectors it's always less than the maximum of 0xfff for the
@@ -277,6 +276,9 @@ static void doCleanup(BlockdevifHandle *h) {
 	for (int i=h->descStart; i<searchEnd; i++) {
 		if (descValid(&h->descs[i]) && !descEmpty(&h->descs[i])) {
 			if (h->descs[i].virtSector!=LASTCOMPLETE_SECT_IND) {
+				//ToDo: using lastDescForVsect twice per sector eats up a lot of time, up to triggering
+				//the task wdt. ToDo: optimize. Idea on how to: allocate a bitmap of 512 and parse the
+				//keep-ability of the entire sector that way.
 				int mostRecent=lastDescForVsect(h, h->descs[i].virtSector);
 				int mostRecentSnapshotted;
 				if (h->lastCompleteId) {
@@ -285,7 +287,7 @@ static void doCleanup(BlockdevifHandle *h) {
 					mostRecentSnapshotted=-1;
 				}
 				assert(mostRecent>=0); //can't be null because it always can return the sector we're looking at.
-#if 1
+#if 0
 				printf("Desc %d, mostRecent=%d (%d) mostRecentSnapshotted=%d (%d). Desc phys=%d virt=%d\n", 
 							i, mostRecent, h->descs[mostRecent].changeId, 
 							mostRecentSnapshotted, (mostRecentSnapshotted>=0)?h->descs[mostRecentSnapshotted].changeId:-1,
@@ -466,16 +468,29 @@ static SetSectorDataRetVal blockdevifSetSectorData(BlockdevifHandle *h, int sect
 	return SSDR_SETCHID;
 }
 
-static void blockdevifForEachBlock(BlockdevifHandle *handle, BlockdevifForEachBlockFn *cb, void *arg) {
-	for (int i=0; i<handle->fsSize; i++) {
-		int j=lastDescForVsect(handle, i);
-		if (j>=0) {
-			uint32_t chid=handle->descs[j].changeId;
-			cb(i, chid, arg);
-		} else {
-			cb(i, 0, arg);
+static void blockdevifForEachBlock(BlockdevifHandle *h, BlockdevifForEachBlockFn *cb, void *arg) {
+	uint32_t *ids=malloc(sizeof(uint32_t)*h->fsSize);
+	memset(ids, 0, sizeof(uint32_t)*h->fsSize);
+
+	int j=h->descStart; 
+	while(j!=h->descPos) {
+		if (descValid(&h->descs[j]) && !descEmpty(&h->descs[j])) {
+			if (h->descs[j].virtSector < h->fsSize) {
+				if (ids[h->descs[j].virtSector]<h->descs[j].changeId) ids[h->descs[j].virtSector]=h->descs[j].changeId;
+			} else {
+				if (h->descs[j].virtSector!=LASTCOMPLETE_SECT_IND) {
+					printf("Huh? Corrupted physSect (%d) in desc %d?\n", h->descs[j].physSector, j);
+				}
+			}
 		}
+		j++;
+		if (j>=descCount(h)) j=0;
 	}
+
+	for (int i=0; i<h->fsSize; i++) {
+		cb(i, ids[i], arg);
+	}
+	free(ids);
 }
 
 static void blockdevifNotifyComplete(BlockdevifHandle *h, uint32_t id) {

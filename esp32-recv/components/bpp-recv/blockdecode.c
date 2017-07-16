@@ -70,7 +70,7 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 		uint32_t idOld=ntohl(p->changeIdOrig);
 		uint32_t idNew=ntohl(p->changeIdNew);
 		uint16_t noBits=ntohs(p->noBits);
-		powerHold((int)arg);
+		powerHold((int)arg, 30*1000);
 		d->currentChangeID=idNew;
 		printf("Bitmap for %d->%d.\n", ntohl(p->changeIdOrig), idNew);
 		if ((len-sizeof(BDPacketBitmap)) > d->noBlocks/8) return; //Shouldn't happen
@@ -82,8 +82,8 @@ static void blockdecodeRecv(int subtype, uint8_t *data, int len, void *arg) {
 			//Update if bit is 1 in bitmap
 			if ( i >= (len-sizeof(BDPacketBitmap))*8 || p->bitmap[i/8]&(1<<(i&7))) {
 				//printf("Block %d set in bitmap. Its id is %d, id should be newer than %d to upgrade to %d.\n", i, idcacheGet(d->idcache, i), idOld, idNew);
-				if (idcacheGet(d->idcache, i)>=idOld) {
-					idcacheSet(d->idcache, i, d->currentChangeID);
+				if (idcacheGet(d->idcache, i) >= idOld) {
+					idcacheSet(d->idcache, i, idNew);
 					updCount++;
 				}
 			}
@@ -201,10 +201,9 @@ BlockDecodeHandle *blockdecodeInit(int type, int size, BlockdevIf *bdIf, void *b
 	d->currentChangeID=idcacheGetLastChangeId(d->idcache);
 
 
-//	powerHold((int)d);
+	powerHold((int)d, 30*1000);
 
 	hldemuxAddType(type, blockdecodeRecv, d);
 
 	return d;
 }
-
