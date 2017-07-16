@@ -9,13 +9,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 typedef struct SenderDstItem SenderDstItem;
 
 struct SenderDstItem{
-	char *name;
 	struct sockaddr *addr;
 	socklen_t addrlen;
+	time_t timeout;
 	SenderDstItem *next;
 };
 
@@ -41,10 +42,34 @@ int senderInit() {
 #define str(a) str2(a)
 #define str2(a) #a
 
-int senderAddDest(char *hostname) {
+int senderAddDestSockaddr(struct sockaddr *addr, socklen_t addrlen, int timeout) {
+	SenderDstItem *dest;
+	for (dest=senderDest; dest!=NULL; dest=dest->next) {
+		if (dest->addrlen==addrlen && memcmp(dest->addr, addr, addrlen)==0) break;
+	}
+	if (dest!=NULL) {
+		//Just modify timeout.
+		dest->timeout=time(NULL)+timeout;
+	} else {
+		//Allocate new dest struct, and everything in it
+		dest=malloc(sizeof(SenderDstItem));
+		memset(dest, 0, sizeof(SenderDstItem));
+		dest->addr=malloc(addrlen);
+		//Copy over info
+		memcpy(dest->addr, addr, addrlen);
+		dest->addrlen=addrlen;
+		dest->timeout=time(NULL)+timeout;
+		//Add into linked list
+		dest->next=senderDest;
+		senderDest=dest;
+	}
+	return 1;
+}
+
+
+int senderAddDest(char *hostname, int timeout) {
 	const char* portname="2017";
 	struct addrinfo hints;
-	SenderDstItem *dest;
 	memset(&hints,0,sizeof(hints));
 	//Grab address info for hostname
 	hints.ai_family=AF_UNSPEC;
@@ -58,21 +83,7 @@ int senderAddDest(char *hostname) {
 		perror(hostname);
 		return 0;
 	}
-	//Allocate new dest struct, and everything in it
-	dest=malloc(sizeof(SenderDstItem));
-	memset(dest, 0, sizeof(SenderDstItem));
-	dest->addr=malloc(res->ai_addrlen);
-	dest->name=malloc(strlen(hostname)+1);
-	//Copy over info
-	strcpy(dest->name, hostname);
-	memcpy(dest->addr, res->ai_addr, res->ai_addrlen);
-	dest->addrlen=res->ai_addrlen;
-	//Add into linked list
-	dest->next=senderDest;
-	senderDest=dest;
-	//All done.
-	freeaddrinfo(res);
-	return 1;
+	return senderAddDestSockaddr(res->ai_addr, res->ai_addrlen, timeout);
 }
 
 #define PAD_LENGTH 0
@@ -89,11 +100,31 @@ void senderSendPkt(uint8_t *packet, size_t len) {
 //		printf("Sending 0x%X bytes\n", len);
 		r=sendto(senderFd, ppacket, len, 0, dst->addr, dst->addrlen);
 		if (r==-1) {
-			perror(dst->name);
+			dst->timeout=1; //instantly remove next
 		}
 		dst=dst->next;
 	}
 	free(ppacket);
+
+	//Housekeeping: see if there are dests that need to be killed
+	int notDone=1;
+	do {
+		SenderDstItem *dest, *pdest=NULL;
+		for (dest=senderDest; dest!=NULL; dest=dest->next) {
+			if (dest->timeout!=0 && dest->timeout<time(NULL)) break;
+			pdest=dest;
+		}
+		if (dest) {
+			if (pdest) {
+				pdest->next=dest->next;
+			} else {
+				senderDest=dest->next;
+			}
+			free(dest);
+		} else {
+			notDone=0;
+		}
+	} while (notDone);
 }
 
 

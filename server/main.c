@@ -32,8 +32,7 @@ struct TcpClient {
 	TcpClient *next;
 };
 
-TcpClient *clients;
-
+TcpClient *clients=NULL;
 
 int cycleLenMs=60000; //cycle defaults to 1 min
 struct timeval cycleStart;
@@ -52,8 +51,13 @@ int cycleRemainingMs() {
 }
 
 
-int createSocket(int port) {
-	int fd=socket(AF_INET, SOCK_STREAM, 0);
+int createSocket(int port, int isUdp) {
+	int fd;
+	if (!isUdp) {
+		fd=socket(AF_INET, SOCK_STREAM, 0);
+	} else {
+		fd=socket(AF_INET, SOCK_DGRAM, 0);
+	}
 	if (fd<=0) {
 		perror("creating socket");
 		exit(1);
@@ -72,11 +76,12 @@ int createSocket(int port) {
 		exit(1);
 	}
 
-	if (listen(fd, 8)<0) {
-		perror("listen");
-		exit(1);
+	if (!isUdp) {
+		if (listen(fd, 8)<0) {
+			perror("listen");
+			exit(1);
+		}
 	}
-
 	return fd;
 }
 
@@ -189,12 +194,10 @@ static void handleClient(TcpClient *cl) {
 
 
 int main(int argc, char **argv) {
-	int listenFd;
+	int listenFd, udpFd;
 	senderInit();
-	if (argc==1) {
-		senderAddDest("192.168.5.255");
-	} else {
-		senderAddDest(argv[1]);
+	for (int i=1; i<argc; i++) {
+		senderAddDest(argv[i], 0);
 	}
 	
 #ifndef SIMULATE_PACKET_LOSS
@@ -207,7 +210,8 @@ int main(int argc, char **argv) {
 	serdesInit(fecSend, fecGetMaxPacketLength());
 	hlmuxInit(serdesSend, serdesGetMaxPacketLength());
 
-	listenFd=createSocket(2017);
+	listenFd=createSocket(2017, 0);
+	udpFd=createSocket(2017, 1);
 
 	newCycle();
 	while(1) {
@@ -216,7 +220,9 @@ int main(int argc, char **argv) {
 		struct timeval tout;
 		FD_ZERO(&rfds);
 		FD_SET(listenFd, &rfds);
+		FD_SET(udpFd, &rfds);
 		max=listenFd;
+		if (max<udpFd) max=udpFd;
 		for (TcpClient *i=clients; i!=NULL; i=i->next) {
 			FD_SET(i->fd, &rfds);
 			if (max<i->fd) max=i->fd;
@@ -254,6 +260,16 @@ int main(int argc, char **argv) {
 			newc->waitingForNextCycle=0;
 			clients=newc;
 			printf("Accepted client\n");
+		}
+		if (FD_ISSET(udpFd, &rfds)) {
+			char buf[16];
+			struct sockaddr src;
+			int l;
+			socklen_t srclen;
+			l=recvfrom(udpFd, buf, sizeof(buf), 0, &src, &srclen);
+			if (l>0 && buf[0]=='C') {
+				senderAddDestSockaddr(&src, srclen, 10*60);
+			}
 		}
 
 		for (TcpClient *i=clients; i!=NULL; i=i->next) {
